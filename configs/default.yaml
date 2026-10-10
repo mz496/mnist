@@ -1,0 +1,6 @@
+data:
+  batch_size: 64
+  validation_set_size: 5000
+  validation_set_split_seed: 42
+train:
+  seed: 0

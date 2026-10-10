@@ -19,6 +19,8 @@ Output  linear, 84 -> 10                     10 logits
 Total params ~61.7k (full C3 connectivity)
 """
 
+# TODO 10-09: This needs the nonlinearities.
+
 class LeNet5(nn.Module):
     def __init__(self):
         super(LeNet5, self).__init__()

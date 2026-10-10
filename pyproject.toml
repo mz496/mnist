@@ -6,7 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "datasets>=5.1.0",
+    "pandas-stubs>=3.0.5.260914",
+    "pydantic>=2.13.5",
+    "pyyaml>=6.0.3",
     "torch>=2.14.1",
+    "torchvision>=0.29.1",
     "wandb>=0.30.0",
 ]
 
