@@ -1,3 +1,4 @@
+from pathlib import Path
 import wandb
 
 from mnist.config import load_default_config
@@ -5,6 +6,7 @@ from mnist.data import get_dataloaders
 from mnist.utils import set_seed
 from mnist.model import LeNet5
 import torch
+from datetime import datetime
 
 def main():
     config = load_default_config()
@@ -23,7 +25,8 @@ def main():
 
     optimizer = torch.optim.SGD(model.parameters(), lr=config.train.learning_rate, momentum=config.train.momentum)
     loss_fn = torch.nn.CrossEntropyLoss()
-    wandb.init(project="mnist", config=config.model_dump())
+    name = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run = wandb.init(project="mnist", name=name, config=config.model_dump())
 
     data = get_dataloaders(config.data)
 
@@ -52,6 +55,10 @@ def main():
         if batch_count % 10 == 0:
             wandb.log({"train/loss": loss})
 
+    checkpoint_dir = Path("checkpoints")
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    path = checkpoint_dir / f"{run.id}.pt"
+    torch.save(model.state_dict(), path)
 
 if __name__ == "__main__":
     main()
