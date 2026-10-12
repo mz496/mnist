@@ -7,43 +7,50 @@ from mnist.model import LeNet5
 import torch
 
 def main():
-    model = LeNet5()
     config = load_default_config()
-    data = get_dataloaders(config.data)
-    print(data)
-    raise Exception("break to test data loading only")
+    print("USING MODEL CONFIG")
+    print(config)
 
     set_seed(config.train.seed)
-    logits = model()
 
-    print("LOGITS")
-    print(logits)
+    device = (
+        "cuda" if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available()
+        else "cpu"
+    )
+    print("MOVING MODEL TO DEVICE:", device)
+    model = LeNet5().to(device)
 
-    #display(pd.DataFrame(logits.detach().numpy(), columns=range(10)).round(3))
-    df = pd.DataFrame(logits.detach().numpy(), columns=range(10)).round(3)
-    display(df.style.highlight_max(axis=1, color="green"))
+    optimizer = torch.optim.SGD(model.parameters(), lr=config.train.learning_rate, momentum=config.train.momentum)
+    loss_fn = torch.nn.CrossEntropyLoss()
+    wandb.init(project="mnist", config=config.model_dump())
 
-    loss_fn = nn.CrossEntropyLoss()
-    labels = torch.randint(0, 10, (NUM_SAMPLES,))
-    loss = loss_fn(logits, labels)
-    print("LOSS")
-    print(loss)
+    data = get_dataloaders(config.data)
 
-    print("PREDICTIONS")
-    preds = logits.argmax(dim=1)
-    print(preds)
+    batch_count = 0
+    for batch in data.train:
+        batch_images, batch_labels = batch
 
-    softmaxes = torch.softmax(logits, dim=1)
-    print("SOFTMAXES")
-    print(softmaxes)
+        images = batch_images.to(device)
+        labels = batch_labels.to(device)
 
-    """
-    run = wandb.init(project="mnist-smoke-test")
-    wandb.log({"train/loss": 0})
-    run.summary["final_val_acc"] = 1
-    wandb.finish()
-    print("Hello from mnist!")
-    """
+        # Compute loss
+        logits = model(images)
+        loss = loss_fn(logits, labels)
+
+        # Zero the gradients for this step
+        optimizer.zero_grad()
+
+        # Backprop the gradients through the computation graph
+        loss.backward()
+
+        # Update weights using the computed gradients
+        optimizer.step()  # pyright: ignore[reportUnknownMemberType]
+
+        # Log
+        batch_count += 1
+        if batch_count % 10 == 0:
+            wandb.log({"train/loss": loss})
 
 
 if __name__ == "__main__":

@@ -10,6 +10,8 @@ class DataConfig(BaseModel):
 
 class TrainConfig(BaseModel):
     seed: int
+    learning_rate: float
+    momentum: float
 
 class Config(BaseModel):
     model_config = ConfigDict(
