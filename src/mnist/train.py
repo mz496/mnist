@@ -28,15 +28,18 @@ def main():
     loss_fn = torch.nn.CrossEntropyLoss()
     name = datetime.now().strftime("%Y%m%d-%H%M%S")
     run = wandb.init(project="mnist", name=name, config=config.model_dump())
+    wandb.define_metric("step_number", hidden=True)
+    wandb.define_metric("train/loss", step_metric="step_number")
+    wandb.define_metric("validation/loss", step_metric="step_number")
+    wandb.define_metric("validation/accuracy", step_metric="step_number")
 
     data = get_dataloaders(config.data)
 
     epoch_count = 10
+    step_number = 0
     for epoch in range(epoch_count):
-        batch_count = 0
         for batch in data.train:
             batch_images, batch_labels = batch
-
             images = batch_images.to(device)
             labels = batch_labels.to(device)
 
@@ -53,10 +56,15 @@ def main():
             # Update weights using the computed gradients
             optimizer.step()  # pyright: ignore[reportUnknownMemberType]
 
-            # Log training loss every Nth batch
-            batch_count += 1
-            if batch_count % 10 == 0:
-                wandb.log({"train/loss": train_loss})
+            # Log training loss every Nth batch/step.
+            step_number += 1
+            if step_number % 10 == 0:
+                wandb.log({"train/loss": train_loss, "step_number": step_number})
+        
+        # Log validation loss once per epoch.
+        validation_loss, validation_accuracy = evaluate(model, data.validation, device, loss_fn)
+        wandb.log({"validation/loss": validation_loss, "validation/accuracy": validation_accuracy, "step_number": step_number})
+
 
 
     checkpoint_dir = Path("checkpoints")
