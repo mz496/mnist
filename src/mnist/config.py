@@ -12,6 +12,8 @@ class TrainConfig(BaseModel):
     seed: int
     learning_rate: float
     momentum: float
+    epoch_count: int
+
 
 class Config(BaseModel):
     model_config = ConfigDict(

@@ -28,6 +28,8 @@ def main():
 
     optimizer = torch.optim.SGD(model.parameters(), lr=config.train.learning_rate, momentum=config.train.momentum)
     loss_fn = cast(CrossEntropyLossFunction, torch.nn.CrossEntropyLoss())
+
+    # W&B plumbing
     name = datetime.now().strftime("%Y%m%d-%H%M%S")
     run = wandb.init(project="mnist", name=name, config=config.model_dump())
     wandb.define_metric("step_number", hidden=True)
@@ -37,7 +39,7 @@ def main():
 
     data = get_dataloaders(config.data)
 
-    epoch_count = 10
+    epoch_count = config.train.epoch_count
     step_number = 0
     for epoch in range(epoch_count):
         for batch in data.train:
@@ -70,8 +72,6 @@ def main():
             # Log validation loss once per epoch
             validation_loss, validation_accuracy = evaluate(model, data.validation, device, loss_fn)
             wandb.log({"validation/loss": validation_loss, "validation/accuracy": validation_accuracy, "step_number": step_number})
-
-
 
     checkpoint_dir = Path("checkpoints")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
