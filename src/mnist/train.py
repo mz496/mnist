@@ -1,9 +1,11 @@
 from pathlib import Path
+from typing import Callable, cast
 import wandb
 
 from mnist.config import load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
+from mnist.type_aliases import CrossEntropyLossFunction
 from mnist.utils import set_seed
 from mnist.model import LeNet5
 import torch
@@ -25,7 +27,7 @@ def main():
     model = LeNet5().to(device)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=config.train.learning_rate, momentum=config.train.momentum)
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn = cast(CrossEntropyLossFunction, torch.nn.CrossEntropyLoss())
     name = datetime.now().strftime("%Y%m%d-%H%M%S")
     run = wandb.init(project="mnist", name=name, config=config.model_dump())
     wandb.define_metric("step_number", hidden=True)
@@ -39,9 +41,10 @@ def main():
     step_number = 0
     for epoch in range(epoch_count):
         for batch in data.train:
+            # We could also have copied this all over upfront for MNIST, since it's small
             batch_images, batch_labels = batch
-            images = batch_images.to(device)
-            labels = batch_labels.to(device)
+            images: torch.Tensor = batch_images.to(device)
+            labels: torch.Tensor = batch_labels.to(device)
 
             # Compute loss
             logits = model(images)
@@ -56,14 +59,17 @@ def main():
             # Update weights using the computed gradients
             optimizer.step()  # pyright: ignore[reportUnknownMemberType]
 
-            # Log training loss every Nth batch/step.
+            # Log training loss every Nth batch/step
             step_number += 1
             if step_number % 10 == 0:
-                wandb.log({"train/loss": train_loss, "step_number": step_number})
+                # A sync point explicitly moving data from the GPU to the CPU
+                train_loss_value = train_loss.item()
+                wandb.log({"train/loss": train_loss_value, "step_number": step_number})
         
-        # Log validation loss once per epoch.
-        validation_loss, validation_accuracy = evaluate(model, data.validation, device, loss_fn)
-        wandb.log({"validation/loss": validation_loss, "validation/accuracy": validation_accuracy, "step_number": step_number})
+        with torch.no_grad():
+            # Log validation loss once per epoch
+            validation_loss, validation_accuracy = evaluate(model, data.validation, device, loss_fn)
+            wandb.log({"validation/loss": validation_loss, "validation/accuracy": validation_accuracy, "step_number": step_number})
 
 
 
