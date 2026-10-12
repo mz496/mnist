@@ -3,6 +3,7 @@ import wandb
 
 from mnist.config import load_default_config
 from mnist.data import get_dataloaders
+from mnist.evaluate import evaluate
 from mnist.utils import set_seed
 from mnist.model import LeNet5
 import torch
@@ -30,30 +31,33 @@ def main():
 
     data = get_dataloaders(config.data)
 
-    batch_count = 0
-    for batch in data.train:
-        batch_images, batch_labels = batch
+    epoch_count = 10
+    for epoch in range(epoch_count):
+        batch_count = 0
+        for batch in data.train:
+            batch_images, batch_labels = batch
 
-        images = batch_images.to(device)
-        labels = batch_labels.to(device)
+            images = batch_images.to(device)
+            labels = batch_labels.to(device)
 
-        # Compute loss
-        logits = model(images)
-        loss = loss_fn(logits, labels)
+            # Compute loss
+            logits = model(images)
+            train_loss = loss_fn(logits, labels)
 
-        # Zero the gradients for this step
-        optimizer.zero_grad()
+            # Zero the gradients for this step
+            optimizer.zero_grad()
 
-        # Backprop the gradients through the computation graph
-        loss.backward()
+            # Backprop the gradients through the computation graph
+            train_loss.backward()
 
-        # Update weights using the computed gradients
-        optimizer.step()  # pyright: ignore[reportUnknownMemberType]
+            # Update weights using the computed gradients
+            optimizer.step()  # pyright: ignore[reportUnknownMemberType]
 
-        # Log
-        batch_count += 1
-        if batch_count % 10 == 0:
-            wandb.log({"train/loss": loss})
+            # Log training loss every Nth batch
+            batch_count += 1
+            if batch_count % 10 == 0:
+                wandb.log({"train/loss": train_loss})
+
 
     checkpoint_dir = Path("checkpoints")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
