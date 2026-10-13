@@ -43,6 +43,9 @@ def main():
     step_number = 0
     for epoch in range(epoch_count):
         for batch in data.train:
+            # Set train mode on the model
+            model.train()
+
             # We could also have copied this all over upfront for MNIST, since it's small
             batch_images, batch_labels = batch
             images: torch.Tensor = batch_images.to(device)
@@ -56,6 +59,7 @@ def main():
             optimizer.zero_grad()
 
             # Backprop the gradients through the computation graph
+            # TODO 10-13: Fix type stubs.
             train_loss.backward()
 
             # Update weights using the computed gradients
@@ -68,7 +72,6 @@ def main():
                 train_loss_value = train_loss.item()
                 wandb.log({"train/loss": train_loss_value, "step_number": step_number})
         
-        with torch.no_grad():
             # Log validation loss once per epoch
             validation_loss, validation_accuracy = evaluate(model, data.validation, device, loss_fn)
             wandb.log({"validation/loss": validation_loss, "validation/accuracy": validation_accuracy, "step_number": step_number})
