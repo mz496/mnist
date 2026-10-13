@@ -7,3 +7,10 @@ def set_seed(seed: int):
     np.random.seed(seed)              # NumPy's global RNG
     torch.manual_seed(seed)           # PyTorch CPU RNG (also seeds CUDA in recent versions)
     # torch.cuda.manual_seed_all(seed)  # all GPUs, to be explicit - still needed?
+
+def get_device():
+    return (
+        "cuda" if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available()
+        else "cpu"
+    )

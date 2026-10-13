@@ -6,7 +6,7 @@ from mnist.config import load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
 from mnist.type_aliases import CrossEntropyLossFunction
-from mnist.utils import set_seed
+from mnist.utils import set_seed, get_device
 from mnist.model import LeNet5
 import torch
 from datetime import datetime
@@ -18,11 +18,7 @@ def main():
 
     set_seed(config.train.seed)
 
-    device = (
-        "cuda" if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available()
-        else "cpu"
-    )
+    device = get_device()
     print("MOVING MODEL TO DEVICE:", device)
     model = LeNet5().to(device)
 
