@@ -49,6 +49,4 @@ def evaluate(model: nn.Module, dataloader: DataLoader[InputDatasetItem], device:
     average_loss = total_loss / total_examples
     accuracy = total_correct / total_examples
 
-    print("validation check: total examples", total_examples)
-
     return average_loss, accuracy

@@ -9,6 +9,7 @@ from mnist.type_aliases import CrossEntropyLossFunction
 from mnist.utils import set_seed, get_device
 from mnist.model import LeNet5
 import torch
+from torch.nn import Module
 from datetime import datetime
 
 def main():
@@ -37,6 +38,7 @@ def main():
 
     epoch_count = config.train.epoch_count
     step_number = 0
+    best_validation_loss = float("inf")
     for epoch in range(epoch_count):
         for batch in data.train:
             # Set train mode on the model
@@ -68,13 +70,22 @@ def main():
                 train_loss_value = train_loss.item()
                 wandb.log({"train/loss": train_loss_value, "step_number": step_number})
         
-            # Log validation loss once per epoch
-            validation_loss, validation_accuracy = evaluate(model, data.validation, device, loss_fn)
-            wandb.log({"validation/loss": validation_loss, "validation/accuracy": validation_accuracy, "step_number": step_number})
+        # Log validation loss once per epoch
+        validation_loss, validation_accuracy = evaluate(model, data.validation, device, loss_fn)
+        wandb.log({"validation/loss": validation_loss, "validation/accuracy": validation_accuracy, "step_number": step_number})
 
+        if validation_loss < best_validation_loss:
+            best_validation_loss = validation_loss
+            print(f"updated best checkpoint after achieving validation loss {best_validation_loss}")
+            save_checkpoint(model, run.id)
+
+def save_checkpoint(model: Module, run_id: str) -> None:
+    """
+    torch.save s the checkpoint for run_id.
+    """
     checkpoint_dir = Path("checkpoints")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    path = checkpoint_dir / f"{run.id}.pt"
+    path = checkpoint_dir / f"{run_id}.pt"
     torch.save(model.state_dict(), path)
 
 if __name__ == "__main__":
