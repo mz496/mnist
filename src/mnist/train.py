@@ -71,7 +71,7 @@ def main():
                 wandb.log({"train/loss": train_loss_value, "step_number": step_number})
         
         # Log validation loss once per epoch
-        validation_loss, validation_accuracy = evaluate(model, data.validation, device, loss_fn)
+        validation_loss, validation_accuracy = evaluate(model, data.validation, device)
         wandb.log({"validation/loss": validation_loss, "validation/accuracy": validation_accuracy, "step_number": step_number})
 
         if validation_loss < best_validation_loss:

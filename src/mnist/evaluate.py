@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Any, Callable, cast
 from torch import Tensor, nn
 import torch
 from torch.utils.data import DataLoader
@@ -21,7 +21,10 @@ def count_correct_in_batch(logits: Tensor, labels: Tensor) -> int:
     # Sum where True -> 1
     return int(is_pred_correct.sum().item())
 
-def evaluate(model: nn.Module, dataloader: DataLoader[InputDatasetItem], device: str, loss_fn: CrossEntropyLossFunction):
+def evaluate(model: nn.Module, dataloader: DataLoader[InputDatasetItem], device: str) -> tuple[float, float]:
+    # Ideally we put this as a param for testability
+    loss_fn = cast(CrossEntropyLossFunction, torch.nn.CrossEntropyLoss())
+
     # Set eval mode on the model
     model.eval()
 
@@ -42,7 +45,7 @@ def evaluate(model: nn.Module, dataloader: DataLoader[InputDatasetItem], device:
             loss = loss_fn(logits, labels)
             
             # The total loss for all examples in this batch
-            batch_total_loss = loss.item() * n
+            batch_total_loss: float = loss.item() * n
             total_loss += batch_total_loss
             total_correct += count_correct_in_batch(logits, labels)
             total_examples += n
