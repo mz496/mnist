@@ -6,4 +6,4 @@ train:
   seed: 0
   learning_rate: 0.01
   momentum: 0.9
-  epoch_count: 15
+  epoch_count: 10

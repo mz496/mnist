@@ -1,5 +1,7 @@
 from pathlib import Path
-from typing import Callable, cast
+from typing import cast
+
+import numpy as np
 import wandb
 
 from mnist.config import load_default_config
@@ -29,8 +31,10 @@ def main():
     loss_fn = cast(CrossEntropyLossFunction, torch.nn.CrossEntropyLoss())
 
     # W&B plumbing
-    name = datetime.now().strftime("%Y%m%d-%H%M%S")
+    name = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     run = wandb.init(project="mnist", name=name, config=config.model_dump())
+    # A unique and sortable run ID to identify this run.
+    run_id = f"{name}_{run.id}"
     wandb.define_metric("step_number", hidden=True)
     wandb.define_metric("train/loss", step_metric="step_number")
     wandb.define_metric("validation/loss", step_metric="step_number")
@@ -41,6 +45,16 @@ def main():
     epoch_count = config.train.epoch_count
     step_number = 0
     best_validation_loss = float("inf")
+
+    # For trajectory mapping:
+    # Fill a snapshot buffer, fill it, then write it to disk at the end
+    # We could preallocate but the calculation is too annoying.
+
+    # Spacing of each snapshot.
+    snapshot_spacing = 10
+    # Each row is a weight snapshot.
+    training_snapshot_vectors: list[torch.Tensor] = []
+
     for epoch in range(epoch_count):
         for batch in data.train:
             # Set train mode on the model
@@ -71,8 +85,10 @@ def main():
                 # A sync point explicitly moving data from the GPU to the CPU
                 train_loss_value = train_loss.item()
                 wandb.log({"train/loss": train_loss_value, "step_number": step_number})
-
-            # TODO[trajectory-plotting] Snapshot weight checkpoints during training, say every 10th step, starting at 0.
+            
+            if step_number % snapshot_spacing == 0:
+                # parameters_to_vector takes a copy, then we detach it from the autograd graph, then move it to the CPU
+                training_snapshot_vectors.append(torch.nn.utils.parameters_to_vector(model.parameters()).detach().cpu())
         
         # Log validation loss once per epoch
         validation_loss, validation_accuracy = evaluate(model, data.validation, device)
@@ -81,18 +97,31 @@ def main():
         if validation_loss < best_validation_loss:
             best_validation_loss = validation_loss
             print(f"updated best checkpoint after achieving validation loss {best_validation_loss}")
-            save_checkpoint(model, run.id)
+            save_checkpoint(model, run_id)
+
+        # Write out snapshots
+        save_training_snapshots(run_id, training_snapshot_vectors)
 
         print(f"completed epoch {epoch}")
 
+def save_training_snapshots(run_id: str, training_snapshot_vectors: list[torch.Tensor]) -> None:
+    """
+    Writes out training snapshots to an npz for the trajectory mapping to read
+    """
+    run_dir = Path("checkpoints") / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    np.savez(
+        run_dir / "training_snapshot_vectors.npz",
+        snapshot_vectors=torch.stack(training_snapshot_vectors).numpy(),
+    )
+
 def save_checkpoint(model: Module, run_id: str) -> None:
     """
-    torch.save s the checkpoint for run_id.
+    torch.save s the best-validation-loss checkpoint for run_id.
     """
-    checkpoint_dir = Path("checkpoints")
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    path = checkpoint_dir / f"{run_id}.pt"
-    torch.save(model.state_dict(), path)
+    run_dir = Path("checkpoints") / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), run_dir / "best_validation_loss.pt")
 
 if __name__ == "__main__":
     main()
