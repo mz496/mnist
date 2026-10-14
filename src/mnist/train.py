@@ -129,13 +129,27 @@ def load_training_snapshots(run_id: str) -> np.ndarray:
         raise ValueError(f"expected a [n_snapshots, parameter_count] matrix, got shape {snapshots.shape}")
     return snapshots
 
+def best_checkpoint_path(run_id: str) -> Path:
+    return Path("checkpoints") / run_id / "best_validation_loss.pt"
+
 def save_checkpoint(model: Module, run_id: str) -> None:
     """
     torch.save s the best-validation-loss checkpoint for run_id.
     """
-    run_dir = Path("checkpoints") / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), run_dir / "best_validation_loss.pt")
+    path = best_checkpoint_path(run_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), path)
+
+def load_checkpoint(run_id: str, device: str) -> LeNet5:
+    """
+    Reads the best-validation-loss checkpoint written by save_checkpoint into a fresh model on `device`.
+    """
+    path = best_checkpoint_path(run_id)
+    if not path.is_file():
+        raise FileNotFoundError(f"checkpoint not found: {path}")
+    model = LeNet5().to(device)
+    model.load_state_dict(torch.load(path, map_location=device))
+    return model
 
 if __name__ == "__main__":
     main()

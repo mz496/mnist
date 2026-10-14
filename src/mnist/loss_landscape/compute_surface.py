@@ -10,34 +10,27 @@ from mnist.config import load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
 from mnist.loss_landscape.lib import create_random_direction
-from mnist.model import LeNet5
+from mnist.train import load_checkpoint
 from mnist.utils import get_device
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sweep a checkpoint's weights along a random direction, evaluate the validation loss and accuracy at each point, and save the results to an .npz in plots/"
+        description="Sweep a run's best checkpoint's weights along random directions, evaluate the validation loss and accuracy at each point, and save the results to an .npz in plots/"
     )
-    parser.add_argument("checkpoint", type=Path, help="path to a .pt state_dict, e.g. checkpoints/abc123.pt")
+    parser.add_argument("run_id", type=str, help="run id of a training run, i.e. the name of its folder under checkpoints/, e.g. 2026-10-14T19:28:51_45xyzktb (loads checkpoints/<run_id>/best_validation_loss.pt)")
     parser.add_argument("--trajectory-path", type=Path, help="turn on non-random directions mode so that we can plot a trajectory on the plot - pass in a subdir for the trajectory snapshots, e.g. checkpoints/snapshots-abc123")
     parser.add_argument("--seed", type=int, default=0, help="when in random direction mode, seed for the randomness (2d mode also uses seed + 1)")
     parser.add_argument("--mode", choices=["1d", "2d"], default="1d", help="sweep along one direction or over a 2D grid")
     return parser.parse_args()
 
-def load_checkpoint(path: Path, device: str) -> LeNet5:
-    if not path.is_file():
-        raise FileNotFoundError(f"checkpoint not found: {path}")
-    model = LeNet5().to(device)
-    model.load_state_dict(torch.load(path, map_location=device))
-    return model
-
 def main():
     args = parse_args()
-    checkpoint_path = args.checkpoint
+    run_id: str = args.run_id
     device = get_device()
     print("MOVING MODEL TO DEVICE:", device)
-    # Fetch saved weights from the checkpoint (theta star)
-    model = load_checkpoint(checkpoint_path, device)
+    # Fetch saved weights from the run's best checkpoint (theta star)
+    model = load_checkpoint(run_id, device)
     theta_star = [p.detach().clone() for p in model.parameters()]
     model_shifted = copy.deepcopy(model)
 
@@ -72,7 +65,7 @@ def main():
                 accs.append(acc)
 
         # Save the raw numbers
-        out_path = Path("plots") / f"{checkpoint_path.stem}_1d.npz"
+        out_path = Path("plots") / f"{run_id}_1d.npz"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         np.savez(
             out_path,
@@ -80,7 +73,7 @@ def main():
             loss=np.array(losses),
             acc=np.array(accs),
             seed=np.array(args.seed),
-            checkpoint=np.array(str(checkpoint_path)),
+            run_id=np.array(run_id),
         )
         print("Saved 1D sweep to", out_path)
 
@@ -141,7 +134,7 @@ def main():
             print(f"2D sweep: finished row {j + 1}/{len(betas)} (beta = {beta:.2f})")
 
         # Save the raw numbers
-        out_path = Path("plots") / f"{checkpoint_path.stem}_2d.npz"
+        out_path = Path("plots") / f"{run_id}_2d.npz"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         # TODO[trajectory-plotting] Write trajectory into the npz, if present
         np.savez(
@@ -151,7 +144,7 @@ def main():
             loss=loss_grid,
             acc=acc_grid,
             seed=np.array(args.seed),
-            checkpoint=np.array(str(checkpoint_path)),
+            run_id=np.array(run_id),
         )
         print("Saved 2D sweep to", out_path)
 
