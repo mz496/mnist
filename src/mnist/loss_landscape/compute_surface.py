@@ -10,13 +10,14 @@ from mnist.config import load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
 from mnist.loss_landscape.lib import create_random_direction
-from mnist.loss_landscape.plot import plot_1d
 from mnist.model import LeNet5
 from mnist.utils import get_device
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate a checkpoint on the test set")
+    parser = argparse.ArgumentParser(
+        description="Sweep a checkpoint's weights along a random direction, evaluate the validation loss and accuracy at each point, and save the results to an .npz in plots/"
+    )
     parser.add_argument("checkpoint", type=Path, help="path to a .pt state_dict, e.g. checkpoints/abc123.pt")
     parser.add_argument("--seed", type=int, default=0, help="seed for the random directions")
     return parser.parse_args()
@@ -65,9 +66,18 @@ def main():
             losses.append(loss)
             accs.append(acc)
 
-    out_path = Path("plots") / f"{checkpoint_path.stem}_1d.png"
-    plot_1d(alphas, np.array(losses), np.array(accs), out_path)
-    print("Saved 1D plot to", out_path)
+    # Save the raw numbers
+    out_path = Path("plots") / f"{checkpoint_path.stem}_1d.npz"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(
+        out_path,
+        alphas=alphas,
+        loss=np.array(losses),
+        acc=np.array(accs),
+        seed=np.array(args.seed),
+        checkpoint=np.array(str(checkpoint_path)),
+    )
+    print("Saved 1D sweep to", out_path)
 
     # TODO 10-14: 2D sweep.
     # In a grid from [-x,+x]*[-y,+y] eval as if the weights were shifted to that space
