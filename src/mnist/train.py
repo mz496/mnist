@@ -71,6 +71,8 @@ def main():
                 # A sync point explicitly moving data from the GPU to the CPU
                 train_loss_value = train_loss.item()
                 wandb.log({"train/loss": train_loss_value, "step_number": step_number})
+
+            # TODO[trajectory-plotting] Snapshot weight checkpoints during training, say every 10th step, starting at 0.
         
         # Log validation loss once per epoch
         validation_loss, validation_accuracy = evaluate(model, data.validation, device)

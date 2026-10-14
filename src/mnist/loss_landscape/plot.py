@@ -37,6 +37,8 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
     Filled contour plot of a [len(betas), len(alphas)] grid, with the trained weights (alpha = beta = 0) marked.
     log_levels spaces the contour levels geometrically, which suits a loss that grows over orders of magnitude.
     """
+    # TODO[trajectory-plotting] Take in a list of points representing the path to plot on top of the contour; set range appropriately
+
     levels = np.geomspace(max(float(values.min()), 1e-6), float(values.max()), n_levels) if log_levels else n_levels
 
     fig, ax = plt.subplots(figsize=(7, 6))
