@@ -26,7 +26,7 @@ def create_random_direction(model: nn.Module, seed: int):
     normalize_directions_for_weights_(direction, weights, ignore="bias")
     return direction
 
-def normalize_directions_for_weights_(direction: list[Tensor], weights: list[Tensor], ignore: NormalizeIgnore) -> list[Tensor]:
+def normalize_directions_for_weights_(direction: list[Tensor], weights: list[Tensor], ignore: NormalizeIgnore) -> None:
     """
     Given a vector d given by `direction`, normalize it in-place so that it is unit-distance relative to some norm of `weights`.
     Optionally ignore bias weights. (Also batch-norm, but we don't have any here)
@@ -40,5 +40,6 @@ def normalize_directions_for_weights_(direction: list[Tensor], weights: list[Ten
             else:
                 d.copy_(w)
         else:
+            # Type stubs are bad.
             d.mul_(w.norm() / (d.norm() + 1e-9))
 
