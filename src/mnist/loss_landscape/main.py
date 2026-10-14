@@ -18,6 +18,7 @@ from mnist.utils import get_device
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate a checkpoint on the test set")
     parser.add_argument("checkpoint", type=Path, help="path to a .pt state_dict, e.g. checkpoints/abc123.pt")
+    parser.add_argument("--seed", type=int, default=0, help="seed for the random directions")
     return parser.parse_args()
 
 def load_checkpoint(path: Path, device: str) -> LeNet5:
@@ -42,7 +43,8 @@ def main():
 
     # Get two random directions in weight-space of the model
     # These will be our axes for plotting
-    d1 = create_random_direction(model)
+    print("DIRECTION SEED:", args.seed)
+    d1 = create_random_direction(model, args.seed)
 
     # 1D sweep first
     # Evaluate as if weights were shifted

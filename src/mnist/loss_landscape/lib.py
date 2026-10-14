@@ -1,5 +1,5 @@
 from typing import Literal
-from torch import Tensor, nn, randn
+from torch import Generator, Tensor, nn, randn
 
 """
 A reimplementation of https://github.com/tomgoldstein/loss-landscape/blob/master/net_plotter.py
@@ -13,15 +13,16 @@ def get_weights(model: nn.Module) -> list[Tensor]:
     """
     return [p.data for p in model.parameters()]
 
-def create_random_weights(weights: list[Tensor]) -> list[Tensor]:
+def create_random_weights(weights: list[Tensor], seed: int) -> list[Tensor]:
     """
-    From a model's weights, create random weights of the same parameter shapes.
+    From a model's weights, create random weights of the same parameter shapes with the given seed
     """
-    return [randn(w.size(), device=w.device) for w in weights]
+    generator = Generator().manual_seed(seed)
+    return [randn(w.size(), generator=generator).to(w.device) for w in weights]
 
-def create_random_direction(model: nn.Module):
+def create_random_direction(model: nn.Module, seed: int):
     weights: list[Tensor] = get_weights(model)
-    direction: list[Tensor] = create_random_weights(weights)
+    direction: list[Tensor] = create_random_weights(weights, seed)
     normalize_directions_for_weights_(direction, weights, ignore="bias")
     return direction
 
