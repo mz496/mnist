@@ -20,8 +20,10 @@ def main():
     set_seed(config.train.seed)
 
     device = get_device()
-    print("MOVING MODEL TO DEVICE:", device)
+    print(f"MOVING MODEL TO DEVICE: {device}")
     model = LeNet5().to(device)
+    parameter_count = sum(p.numel() for p in model.parameters())
+    print(f"PARAMETER COUNT CHECK: {parameter_count}")
 
     optimizer = torch.optim.SGD(model.parameters(), lr=config.train.learning_rate, momentum=config.train.momentum)
     loss_fn = cast(CrossEntropyLossFunction, torch.nn.CrossEntropyLoss())
@@ -78,6 +80,8 @@ def main():
             best_validation_loss = validation_loss
             print(f"updated best checkpoint after achieving validation loss {best_validation_loss}")
             save_checkpoint(model, run.id)
+
+        print(f"completed epoch {epoch}")
 
 def save_checkpoint(model: Module, run_id: str) -> None:
     """
