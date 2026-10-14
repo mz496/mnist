@@ -115,6 +115,20 @@ def save_training_snapshots(run_id: str, training_snapshot_vectors: list[torch.T
         snapshot_vectors=torch.stack(training_snapshot_vectors).numpy(),
     )
 
+def load_training_snapshots(run_id: str) -> np.ndarray:
+    """
+    Reads the snapshots written by save_training_snapshots.
+    Returns [n_snapshots, parameter_count] float32: one row per snapshot, in training order.
+    """
+    path = Path("checkpoints") / run_id / "training_snapshot_vectors.npz"
+    if not path.is_file():
+        raise FileNotFoundError(f"training snapshots not found: {path}")
+    with np.load(path) as data:
+        snapshots = data["snapshot_vectors"]
+    if snapshots.ndim != 2:
+        raise ValueError(f"expected a [n_snapshots, parameter_count] matrix, got shape {snapshots.shape}")
+    return snapshots
+
 def save_checkpoint(model: Module, run_id: str) -> None:
     """
     torch.save s the best-validation-loss checkpoint for run_id.
