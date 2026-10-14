@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "datasets>=5.1.0",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
     "pandas-stubs>=3.0.5.260914",
     "pydantic>=2.13.5",
     "pyyaml>=6.0.3",
