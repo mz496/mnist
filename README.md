@@ -21,7 +21,7 @@
 I started out with a goal:
 - Build understanding and intuition of a problem
 - Learn how to use modern tooling
-- Build the skill of asking questions and answering them
+- Build the skill of asking interesting questions and answering them
 
 Using the handwritten digit classification task on MNIST as a testbed.
 
@@ -46,7 +46,7 @@ Spent a while on types to make sure I have everything straight on my data prepar
 - I did want to document the type of the HF dataset entries, hence the `InputDatasetItem`.
 - I lazyload the dataset to build a good habit even though MNIST fits in memory.
     - Given this - where does the input transform live, since the images are 0-255 ints, and we want them to be floats? I end up using PyTorch's `collate`. `set_transform` belongs to HF but I would rather work more in PyTorch
-- While digging through and justifying each line, Claude suggests I normalize the inputs to the mean, and points me to [Efficient Backprop (LeCun et al, 1998)](https://cseweb.ucsd.edu/classes/wi08/cse253/Handouts/lecun-98b.pdf) section 4.3: Normalizing the Inputs). I'm intentionally leaving it out just to see what would happen later. Maybe later I'll also experiment with different hyperparameters like the filter sizes, nonlinearity functions, etc.
+- While digging through and justifying each line, Claude suggests I normalize the inputs to the mean, and points me to [Efficient Backprop (LeCun et al, 1998)](https://cseweb.ucsd.edu/classes/wi08/cse253/Handouts/lecun-98b.pdf) section 4.3: Normalizing the Inputs. I'm intentionally leaving it out just to see what would happen later. Maybe later I'll also experiment with different hyperparameters like the filter sizes, nonlinearity functions, etc.
 - However, I also learned about the "modern" movement toward fiddling less with the exact hyperparameters and trusting the process more, which is simultaneously cool and somewhat maddening that it can be so hands-off. In the original paper, the very specific pattern to the S2-C3 connections ([Gradient-Based Learning Applied to Document Recognition (LeCun et al, 1998)](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf) section II.B: LeNet5) is rationalized as keeping parameter count down and forcing different features to be learned, which I completely discard as a simplification for now.
 
 ### Oct 12
@@ -75,23 +75,52 @@ At some point I'll set up [type stubs](https://github.com/pytorch/pytorch/wiki/G
 
 ### Oct 14
 
-Instead of fiddling with hyperparameters yet, I decided to push forward on this other interesting paper I saw in order to grok what is happening a bit better: [Visualizing the Loss Landscape of Neural Nets (Li et al, 2018)](https://ar5iv.labs.arxiv.org/html/1712.09913).
+Instead of fiddling with hyperparameters yet, I decided to push forward on this other interesting paper I saw in order to grok what is happening with the trained weights a bit better: [Visualizing the Loss Landscape of Neural Nets (Li et al, 2018)](https://ar5iv.labs.arxiv.org/html/1712.09913).
+
+Also, I wanted to see whether I could watch something more visual than the training loss change while addressing that potential plateau/initialization issue from Oct 12.
+
+#### 1D
+The gist of it in 1D (I am changing some notation from the paper to make it slightly clearer IMO):
+- Take a trained network's many-dimensional weights $\theta^\star$; this is your (0, 0).
+- In some direction vector $\overset{\rightharpoonup}{\alpha}$ normalized relative to the weights, slide along those vectors (parametrized by, say, $u$) and evaluate the network at points along those vectors: $L(\theta^\star + u\overset{\rightharpoonup}{\alpha})$.
+  - This direction vector is normalized relative to the filter weights.
+- Plot loss vs. $u$.
 
 I got 1D plots working first, which roughly matches the graphs from earlier: validation loss and accuracy peak correctly (at a minimum and a maximum respectively) which is a good sign:
 
 ![](img/2026-10-14-3ngzl3w2_1d.png)
 
-Then 2D plots with the method of random directions around the best-validation-loss weights. Loss is a bit nicer in that the bands more clearly show the minimum, but probably could have used log-scale for both:
+#### 2D
+
+In 2D, this is roughly the same:
+- Take a trained network's many-dimensional weights $\theta^\star$; this is your (0, 0).
+- In some direction vectors $\overset{\rightharpoonup}{\alpha}$, $\overset{\rightharpoonup}{\beta}$, both normalized relative to the weights, slide along those vectors (parametrized by, say, $u$, $v$) and evaluate the network at points along those vectors: $L(\theta^\star + u\overset{\rightharpoonup}{\alpha} + v\overset{\rightharpoonup}{\beta})$.
+- Plot a contour where your x,y position is the $\alpha$, $\beta$ coordinate and color is the value (loss or validation).
+
+The 2D plots with the method of random directions around the best-validation-loss weights. Loss is a bit nicer in that the bands more clearly show the minimum, but probably could have used log-scale for both:
 
 | accuracy | loss |
 | --- | --- |
 | ![](img/2026-10-14-3ngzl3w2_2d_acc_contour.png) | ![](img/2026-10-14-3ngzl3w2_2d_loss_contour.png) |
 
-
 I'm also inspired by Chris Olah's attempts at dimensionality reduction to [visualize the dataset itself (2014).](https://colah.github.io/posts/2014-10-Visualizing-MNIST/)
 
-I planned out the changes to plot the training trajectory itself to see if I could replicate or build intuition on that initial plateau from Oct 12.
+I planned out the changes to plot the training trajectory.
 
 ### Oct 15
 
+Finished the training trajectory plotting with updated color and band-scale so that we both get log-spaced bands and log-spaced contrast.
 
+The algorithm is:
+- Snapshot $n$ weights during training.
+- Find the 2-dimensional projection that captures the most variation in these $n$ datapoints:
+  - Take the PCA and use the top 2 basis vectors.
+  - Use this basis $\overset{\rightharpoonup}{\alpha}$, $\overset{\rightharpoonup}{\beta}$ to define the plane, instead of the random ones from the earlier method that just plotted the network weights.
+- Center the trajectory on the weights so that it ends at (0,0).
+- Use the final training snapshot as $\theta^\star$ for the contour plot.
+
+![](img/2026-10-14T19:28:51_45xyzktb_2d_acc_contour.png)
+
+Working on a few things:
+- This does not capture that early training dropoff I was hoping for
+- The training path cuts across the gradient, probably because of movement in some other dimension

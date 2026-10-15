@@ -9,14 +9,17 @@ import numpy as np
 from matplotlib.colors import BoundaryNorm
 
 
-def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: Path) -> None:
+def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: Path, run_id: str | None = None) -> None:
     """
     Plot validation loss and accuracy along one direction through the trained weights.
     alphas: [N] step sizes along the direction (0 is the trained model)
     losses: [N] loss at each alpha
     accs:   [N] accuracy at each alpha
+    run_id: shown in the title, if given
     """
     fig, (ax_loss, ax_acc) = plt.subplots(2, 1, sharex=True, figsize=(7, 6))
+    if run_id is not None:
+        fig.suptitle(f"run {run_id}")
 
     ax_loss.plot(alphas, losses, marker="o")
     ax_loss.set_ylabel("validation loss")
@@ -33,13 +36,15 @@ def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: 
     plt.close(fig)
 
 
-def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20, trajectory: np.ndarray | None = None, log_error_levels: bool = False) -> None:
+def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20, trajectory: np.ndarray | None = None, log_error_levels: bool = False, run_id: str | None = None, explained_variance: np.ndarray | None = None) -> None:
     """
     Filled contour plot of a [len(betas), len(alphas)] grid, with the trained weights (alpha = beta = 0) marked.
     log_levels spaces the contour levels geometrically, which suits a loss that grows over orders of magnitude.
     log_error_levels is for values that approach 1 (accuracy): the levels are spaced geometrically in (1 - value),
     so they crowd toward 1.0, where a plain linear or log scale on the value itself would look flat.
     trajectory: optional [n, 2] array of (alpha, beta) points, the training path, drawn on top of the contour.
+    run_id: shown in the title, if given.
+    explained_variance: optional [2] fraction of the snapshots' variance along PC1 and PC2, shown in the axis labels.
     """
     levels: np.ndarray | int
     # By default the colors follow the value linearly, so levels crowded near 1.0 would all land on one end of the colormap.
@@ -64,15 +69,19 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
         ax.set_ylabel("beta (step along d2, relative to filter norm)")
     else:
         # PCA directions are unit vectors, so the axes are plain weight-space distance
-        ax.set_xlabel("alpha (PC1, weight-space distance)")
-        ax.set_ylabel("beta (PC2, weight-space distance)")
+        x_label, y_label = "alpha (PC1, weight-space distance)", "beta (PC2, weight-space distance)"
+        if explained_variance is not None:
+            x_label = f"alpha (PC1, {float(explained_variance[0]):.1%} of variance, weight-space distance)"
+            y_label = f"beta (PC2, {float(explained_variance[1]):.1%} of variance, weight-space distance)"
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
         ax.plot(trajectory[:, 0], trajectory[:, 1], color="white", linewidth=1, zorder=3)
         ax.scatter(trajectory[:, 0], trajectory[:, 1], color="red", s=8, zorder=4)
         ax.plot(trajectory[0, 0], trajectory[0, 1], marker="o", color="lime", markeredgecolor="k", markersize=9, zorder=5, label="start")
         ax.plot(trajectory[-1, 0], trajectory[-1, 1], marker="s", color="cyan", markeredgecolor="k", markersize=8, zorder=5, label="end")
         ax.legend(loc="upper right")
     ax.set_aspect("equal")
-    ax.set_title(title)
+    ax.set_title(title if run_id is None else f"{title}\nrun {run_id}")
 
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -80,9 +89,10 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
     plt.close(fig)
 
 
-def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str) -> None:
+def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, run_id: str | None = None) -> None:
     """
     3D surface plot of a [len(betas), len(alphas)] grid.
+    run_id: shown in the title, if given.
     """
     alpha_mesh, beta_mesh = np.meshgrid(alphas, betas)
 
@@ -92,6 +102,8 @@ def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
     ax.set_xlabel("alpha (d1)")
     ax.set_ylabel("beta (d2)")
     ax.set_zlabel(title)
+    if run_id is not None:
+        ax.set_title(f"{title}\nrun {run_id}")
 
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -113,21 +125,24 @@ def main() -> None:
     if args.npz.stem.endswith("_1d"):
         with np.load(args.npz) as data:
             alphas, losses, accs = data["alphas"], data["loss"], data["acc"]
+            run_id = str(data["run_id"]) if "run_id" in data.files else None
         out_path = args.npz.with_suffix(".png")
-        plot_1d(alphas, losses, accs, out_path)
+        plot_1d(alphas, losses, accs, out_path, run_id=run_id)
         print("Saved 1D plot to", out_path)
     elif args.npz.stem.endswith("_2d"):
         with np.load(args.npz) as data:
             alphas, betas, losses, accs = data["alphas"], data["betas"], data["loss"], data["acc"]
             # Only present for sweeps run with --trajectory-plot
             trajectory = data["trajectory"] if "trajectory" in data.files else None
+            explained_variance = data["explained_variance"] if "explained_variance" in data.files else None
+            run_id = str(data["run_id"]) if "run_id" in data.files else None
         for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
             out_path = args.npz.with_name(f"{args.npz.stem}_{name}_{args.style}.png")
             title = f"validation {'loss' if name == 'loss' else 'accuracy'}"
             if args.style == "contour":
-                plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels)
+                plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance)
             else:
-                plot_2d_surface(alphas, betas, values, out_path, title)
+                plot_2d_surface(alphas, betas, values, out_path, title, run_id=run_id)
             print(f"Saved 2D {args.style} plot to", out_path)
     else:
         raise ValueError(f"expected a file name ending in _1d or _2d, got {args.npz.name}")
