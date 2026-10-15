@@ -109,7 +109,7 @@ I planned out the changes to plot the training trajectory.
 
 ### Oct 15
 
-Finished the training trajectory plotting with updated color and band-scale so that we both get log-spaced bands and log-spaced contrast.
+Finished the training trajectory plotting with updated color and band-scale so that we get both log-spaced bands and log-spaced contrast.
 
 The algorithm is:
 - Snapshot $n$ weights during training.
@@ -124,3 +124,4 @@ The algorithm is:
 Working on a few things:
 - This does not capture that early training dropoff I was hoping for
 - The training path cuts across the gradient, probably because of movement in some other dimension
+- The final network is sheared oddly instead of the round plots from earlier, and the distance is correct (i.e. it's not an aspect ratio problem).
