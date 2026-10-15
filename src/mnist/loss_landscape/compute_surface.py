@@ -10,6 +10,7 @@ from mnist.config import load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
 from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots, project_snapshots_onto_pca_directions
+from mnist.model import LeNet5
 from mnist.train import load_checkpoint, load_training_snapshots
 from mnist.utils import get_device
 
@@ -19,7 +20,7 @@ def parse_args() -> argparse.Namespace:
         description="Sweep a run's best checkpoint's weights along random directions, evaluate the validation loss and accuracy at each point, and save the results to an .npz in plots/"
     )
     parser.add_argument("run_id", type=str, help="run id of a training run, i.e. the name of its folder under checkpoints/, e.g. 2026-10-14T19:28:51_45xyzktb (loads checkpoints/<run_id>/best_validation_loss.pt)")
-    parser.add_argument("--trajectory-plot", action="store_true", help="turn on non-random directions mode to plot trajectories (uses the training snapshots' PCA directions for this run id instead)")
+    parser.add_argument("--trajectory-plot", action="store_true", help="turn on non-random directions mode to plot trajectories (uses the training snapshots' PCA directions for this run id instead, and centers on the final training snapshot rather than the best validation checkpoint)")
     parser.add_argument("--seed", type=int, default=0, help="when in random direction mode, seed for the randomness (2d mode also uses seed + 1)")
     parser.add_argument("--mode", choices=["1d", "2d"], default="1d", help="sweep along one direction or over a 2D grid")
     return parser.parse_args()
@@ -29,9 +30,18 @@ def main():
     run_id: str = args.run_id
     device = get_device()
     print("MOVING MODEL TO DEVICE:", device)
-    # Fetch saved weights from the run's best checkpoint (theta star)
-    model = load_checkpoint(run_id, device)
-    # TODO[trajectory-plotting] Don't load the best validation checkpoint when plotting trajectories. Use the final training snapshot as theta_star in that case.
+    if args.trajectory_plot and args.mode == "1d":
+        raise Exception("trajectory plot not supported for 1D")
+
+    if args.trajectory_plot:
+        # [n, D] where n is the number of snapshots
+        snapshots = load_training_snapshots(run_id)
+        # Theta star is the final training snapshot, not the best validation checkpoint
+        model = LeNet5().to(device)
+        torch.nn.utils.vector_to_parameters(torch.from_numpy(snapshots[-1]).to(device), model.parameters())
+    else:
+        # Fetch saved weights from the run's best checkpoint (theta star)
+        model = load_checkpoint(run_id, device)
     theta_star: list[torch.Tensor] = [p.detach().clone() for p in model.parameters()]
     # Vector form of theta_star for trajectory plotting, intentionally matching the vectorization of the snapshots
     theta_star_vector: np.ndarray = torch.nn.utils.parameters_to_vector(model.parameters()).detach().cpu().numpy()
@@ -42,9 +52,6 @@ def main():
     data = get_dataloaders(config.data)
 
     if args.mode == "1d":
-        if args.trajectory_plot:
-            raise Exception("trajectory plot not supported for 1D")
-
         # Get a random direction in weight-space of the model
         # This will be our axis for plotting
         print("DIRECTION SEED:", args.seed)
@@ -84,9 +91,6 @@ def main():
     elif args.mode == "2d":
         if args.trajectory_plot:
             # Use training snapshots as the plotting plane and to plot the trajectory on that plane
-
-            # [n, D] where n is the number of snapshots
-            snapshots = load_training_snapshots(run_id)
 
             # PCA on training snapshots; extract top 2
             snapshot_pca_directions, explained_variance = get_pca_directions_for_snapshots(snapshots)
