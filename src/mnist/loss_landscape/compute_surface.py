@@ -85,7 +85,6 @@ def main():
         if args.trajectory_plot:
             # Use training snapshots as the plotting plane and to plot the trajectory on that plane
 
-            # TODO[trajectory-plotting] Load training snapshots for run id
             # [n, D] where n is the number of snapshots
             snapshots = load_training_snapshots(run_id)
 
