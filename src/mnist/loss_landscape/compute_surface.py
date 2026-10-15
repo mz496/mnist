@@ -9,8 +9,8 @@ import numpy as np
 from mnist.config import load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
-from mnist.loss_landscape.lib import create_random_direction
-from mnist.train import load_checkpoint
+from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots
+from mnist.train import load_checkpoint, load_training_snapshots
 from mnist.utils import get_device
 
 
@@ -19,7 +19,7 @@ def parse_args() -> argparse.Namespace:
         description="Sweep a run's best checkpoint's weights along random directions, evaluate the validation loss and accuracy at each point, and save the results to an .npz in plots/"
     )
     parser.add_argument("run_id", type=str, help="run id of a training run, i.e. the name of its folder under checkpoints/, e.g. 2026-10-14T19:28:51_45xyzktb (loads checkpoints/<run_id>/best_validation_loss.pt)")
-    parser.add_argument("--trajectory-path", type=Path, help="turn on non-random directions mode so that we can plot a trajectory on the plot - pass in a subdir for the trajectory snapshots, e.g. checkpoints/snapshots-abc123")
+    parser.add_argument("--trajectory-plot", action="store_true", help="turn on non-random directions mode to plot trajectories (uses the training snapshots' PCA directions for this run id instead)")
     parser.add_argument("--seed", type=int, default=0, help="when in random direction mode, seed for the randomness (2d mode also uses seed + 1)")
     parser.add_argument("--mode", choices=["1d", "2d"], default="1d", help="sweep along one direction or over a 2D grid")
     return parser.parse_args()
@@ -38,7 +38,7 @@ def main():
     data = get_dataloaders(config.data)
 
     if args.mode == "1d":
-        if args.trajectory_path is not None:
+        if args.trajectory_plot:
             raise Exception("trajectory plot not supported for 1D")
 
         # Get a random direction in weight-space of the model
@@ -78,28 +78,20 @@ def main():
         print("Saved 1D sweep to", out_path)
 
     elif args.mode == "2d":
-        if args.trajectory_path is not None:
+        if args.trajectory_plot:
             # Use training snapshots as the plotting plane and to plot the trajectory on that plane
 
             # TODO[trajectory-plotting] Load training snapshots for run id
+            snapshots = load_training_snapshots(run_id)
 
-            # TODO[trajectory-plotting] PCA on training snapshots; extract top 2
-            # Set d1, d2 here
-            # Do explained-variance check
-            # Fix signs? TO ma Something like:
-            # def fix_signs(components: np.ndarray, coords: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-            # """
-            # components: [2, D] the principal directions
-            # coords: [n, 2] each snapshot's coordinates along them
-            # Flip each component so the snapshot with the largest |coordinate| on it is positive.
-            # """
-            # for k in range(components.shape[0]):
-            #     ref = int(np.argmax(np.abs(coords[:, k])))
-            #     if coords[ref, k] < 0:
-            #         components[k] *= -1
-            #         coords[:, k] *= -1
-            # return components, coords
-
+            # PCA on training snapshots; extract top 2
+            snapshot_pca_directions, explained_variance = get_pca_directions_for_snapshots(snapshots)
+            # TODO[trajectory-plotting] Project the [2, D] vectors into [2, 2] using weight-space?
+            print("SNAPSHOT PCA DIRECTIONS")
+            print(snapshot_pca_directions)
+            print("EXPLAINED VARIANCE")
+            print(explained_variance)
+            
             # TODO[trajectory-plotting] Project each snapshot onto PCAs to get (alpha_s, beta_s) per-snapshot points
             # Set xmin, xmax, ymin, ymax here
 

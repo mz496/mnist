@@ -7,8 +7,8 @@ train:
 test checkpoint:
     uv run python -m mnist.test "{{checkpoint}}"
 
-loss-landscape-compute run_id mode="1d":
-    uv run python -m mnist.loss_landscape.compute_surface "{{run_id}}" --mode {{mode}}
+loss-landscape-compute run_id *flags:
+    uv run python -m mnist.loss_landscape.compute_surface "{{run_id}}" {{flags}}
 
-loss-landscape-plot npz style="contour":
-    uv run python -m mnist.loss_landscape.plot "{{npz}}" --style {{style}}
+loss-landscape-plot npz *flags:
+    uv run python -m mnist.loss_landscape.plot "{{npz}}" {{flags}}

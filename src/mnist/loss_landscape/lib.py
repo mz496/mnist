@@ -1,8 +1,10 @@
 from typing import Literal
 from torch import Generator, Tensor, nn, randn
 
+import numpy as np
+
 """
-A reimplementation of https://github.com/tomgoldstein/loss-landscape/blob/master/net_plotter.py
+Heavily inspired by https://github.com/tomgoldstein/loss-landscape
 """
 
 type NormalizeIgnore = Literal["bias", "none"]
@@ -43,3 +45,19 @@ def normalize_directions_for_weights_(direction: list[Tensor], weights: list[Ten
             # Type stubs are bad.
             d.mul_(w.norm() / (d.norm() + 1e-9))
 
+def get_pca_directions_for_snapshots(snapshots: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Input: [n, D] array where each row is an observation/snapshot of training weights
+    Does SVD to get the top two PCA directions out of V^T (as in U*S*V^T), [2, D]
+    Returns:
+    - those top two directions [2, D], relative to the snapshots' mean
+    - the explained variance ratio of those top two directions [2]
+    """
+    # Center each row around 0.
+    centered = snapshots - snapshots.mean(axis=0)
+    # SVD
+    _, s, vt = np.linalg.svd(centered, full_matrices=False)
+    # Top two directions of the PCA.
+    components = vt[:2]
+    explained_variance_ratio = (s ** 2 / (s ** 2).sum())[:2]
+    return components, explained_variance_ratio
