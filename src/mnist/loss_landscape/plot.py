@@ -6,6 +6,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import BoundaryNorm
 
 
 def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: Path) -> None:
@@ -32,16 +33,29 @@ def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: 
     plt.close(fig)
 
 
-def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20, trajectory: np.ndarray | None = None) -> None:
+def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20, trajectory: np.ndarray | None = None, log_error_levels: bool = False) -> None:
     """
     Filled contour plot of a [len(betas), len(alphas)] grid, with the trained weights (alpha = beta = 0) marked.
     log_levels spaces the contour levels geometrically, which suits a loss that grows over orders of magnitude.
+    log_error_levels is for values that approach 1 (accuracy): the levels are spaced geometrically in (1 - value),
+    so they crowd toward 1.0, where a plain linear or log scale on the value itself would look flat.
     trajectory: optional [n, 2] array of (alpha, beta) points, the training path, drawn on top of the contour.
     """
-    levels = np.geomspace(max(float(values.min()), 1e-6), float(values.max()), n_levels) if log_levels else n_levels
+    levels: np.ndarray | int
+    # By default the colors follow the value linearly, so levels crowded near 1.0 would all land on one end of the colormap.
+    # A BoundaryNorm gives each band its own equal step of the colormap instead.
+    norm: BoundaryNorm | None = None
+    if log_error_levels:
+        errors = np.geomspace(max(1.0 - float(values.max()), 1e-6), 1.0 - float(values.min()), n_levels)
+        levels = 1.0 - errors[::-1]  # reversed so the levels increase
+        norm = BoundaryNorm(levels, ncolors=256)
+    elif log_levels:
+        levels = np.geomspace(max(float(values.min()), 1e-6), float(values.max()), n_levels)
+    else:
+        levels = n_levels
 
     fig, ax = plt.subplots(figsize=(7, 6))
-    filled = ax.contourf(alphas, betas, values, levels=levels)
+    filled = ax.contourf(alphas, betas, values, levels=levels, norm=norm)
     ax.contour(alphas, betas, values, levels=levels, colors="k", linewidths=0.4)
     fig.colorbar(filled, ax=ax, label=title)
     ax.plot(0, 0, marker="*", color="white", markeredgecolor="k", markersize=14)  # θ*, the trained model
@@ -107,11 +121,11 @@ def main() -> None:
             alphas, betas, losses, accs = data["alphas"], data["betas"], data["loss"], data["acc"]
             # Only present for sweeps run with --trajectory-plot
             trajectory = data["trajectory"] if "trajectory" in data.files else None
-        for name, values, log_levels in (("loss", losses, True), ("acc", accs, False)):
+        for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
             out_path = args.npz.with_name(f"{args.npz.stem}_{name}_{args.style}.png")
             title = f"validation {'loss' if name == 'loss' else 'accuracy'}"
             if args.style == "contour":
-                plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory)
+                plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels)
             else:
                 plot_2d_surface(alphas, betas, values, out_path, title)
             print(f"Saved 2D {args.style} plot to", out_path)
