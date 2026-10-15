@@ -6,7 +6,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import BoundaryNorm
+from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 
 
 def split_label(split: str) -> str:
@@ -42,7 +42,24 @@ def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: 
     plt.close(fig)
 
 
-def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20, trajectory: np.ndarray | None = None, log_error_levels: bool = False, run_id: str | None = None, explained_variance: np.ndarray | None = None) -> None:
+def sample_grid(alphas: np.ndarray, betas: np.ndarray, grid: np.ndarray, points: np.ndarray) -> np.ndarray:
+    """
+    Bilinearly interpolate a [len(betas), len(alphas)] grid at [n, 2] points of (alpha, beta). Returns [n].
+    Points outside the grid are clamped to its edge cells.
+    """
+    i = np.clip(np.searchsorted(alphas, points[:, 0]) - 1, 0, len(alphas) - 2)
+    j = np.clip(np.searchsorted(betas, points[:, 1]) - 1, 0, len(betas) - 2)
+    ta = (points[:, 0] - alphas[i]) / (alphas[i + 1] - alphas[i])
+    tb = (points[:, 1] - betas[j]) / (betas[j + 1] - betas[j])
+    return (
+        grid[j, i] * (1 - ta) * (1 - tb)
+        + grid[j, i + 1] * ta * (1 - tb)
+        + grid[j + 1, i] * (1 - ta) * tb
+        + grid[j + 1, i + 1] * ta * tb
+    )
+
+
+def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20, trajectory: np.ndarray | None = None, log_error_levels: bool = False, run_id: str | None = None, explained_variance: np.ndarray | None = None, trajectory_loss: np.ndarray | None = None, trajectory_loss_label: str = "loss") -> None:
     """
     Filled contour plot of a [len(betas), len(alphas)] grid, with the trained weights (alpha = beta = 0) marked.
     log_levels spaces the contour levels geometrically, which suits a loss that grows over orders of magnitude.
@@ -81,8 +98,14 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
             y_label = f"beta (PC2, {float(explained_variance[1]):.1%} of variance, weight-space distance)"
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
-        ax.plot(trajectory[:, 0], trajectory[:, 1], color="white", linewidth=1, zorder=3)
-        ax.scatter(trajectory[:, 0], trajectory[:, 1], color="red", s=8, zorder=4)
+        if trajectory_loss is None:
+            ax.scatter(trajectory[:, 0], trajectory[:, 1], color="red", s=2, zorder=4)
+        else:
+            # Fade linearly with loss: full red at the largest loss on the path, full white at the smallest
+            white_to_red = LinearSegmentedColormap.from_list("white_to_red", ["white", "red"])
+            path_points = ax.scatter(trajectory[:, 0], trajectory[:, 1], c=trajectory_loss, cmap=white_to_red, s=2, linewidths=0, zorder=4)
+            # Horizontal, under the plot, so it doesn't squeeze the axes next to the other colorbar
+            fig.colorbar(path_points, ax=ax, label=trajectory_loss_label, orientation="horizontal", location="bottom", pad=0.15, shrink=0.8)
         ax.plot(trajectory[0, 0], trajectory[0, 1], marker="o", color="lime", markeredgecolor="k", markersize=9, zorder=5, label="start")
         ax.plot(trajectory[-1, 0], trajectory[-1, 1], marker="s", color="cyan", markeredgecolor="k", markersize=8, zorder=5, label="end")
         ax.legend(loc="upper right")
@@ -146,11 +169,13 @@ def main() -> None:
             run_id = str(data["run_id"]) if "run_id" in data.files else None
             # Older files don't record the split; they were all measured on validation
             split = str(data["split"]) if "split" in data.files else "validation"
+        # The loss at each path point, read off the saved loss grid at that point's position. Not recomputed per snapshot.
+        trajectory_loss = sample_grid(alphas, betas, losses, trajectory) if trajectory is not None else None
         for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
             out_path = args.npz.with_name(f"{args.npz.stem}_{name}_{args.style}.png")
             title = f"{split_label(split)} {'loss' if name == 'loss' else 'accuracy'}"
             if args.style == "contour":
-                plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance)
+                plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance, trajectory_loss=trajectory_loss, trajectory_loss_label=f"{split_label(split)} loss at path point (from the grid)")
             else:
                 plot_2d_surface(alphas, betas, values, out_path, title, run_id=run_id)
             print(f"Saved 2D {args.style} plot to", out_path)

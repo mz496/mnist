@@ -117,11 +117,18 @@ The algorithm is:
   - Take the PCA and use the top 2 basis vectors.
   - Use this basis $\overset{\rightharpoonup}{\alpha}$, $\overset{\rightharpoonup}{\beta}$ to define the plane, instead of the random ones from the earlier method that just plotted the network weights.
 - Center the trajectory on the weights so that it ends at (0,0).
-- Use the final training snapshot as $\theta^\star$ for the contour plot.
+- Use the final training snapshot as $\theta^\star$ for the contour plot. We need to do this because we are using training snapshots for the trajectory points, so another plane would be incorrect, at least relative to the final point.
 
 ![](img/2026-10-14T19:28:51_45xyzktb_2d_acc_contour.png)
 
-Working on a few things:
-- This does not capture that early training dropoff I was hoping for
-- The training path cuts across the gradient, probably because of movement in some other dimension
-- The final network is sheared oddly instead of the round plots from earlier, and the distance is correct (i.e. it's not an aspect ratio problem).
+A few observations:
+- This does not quite capture that early training dropoff I was hoping for
+- The training path cuts across the gradient, probably because of earlier movement in some other dimension.
+  - I think it's because we spend ~10 points covering that ground and the remaining ~8000 elsewhere.
+- The final network projection is a valley in these particular dimensions instead of the round plots from earlier
+  - It's not a zoom issue (as in looking very closely at a side of the bowl only; you can see the other side of the valley at the lower right)
+  - It's not an aspect ratio issue (one unit on $x$ is the same size as one unit on $y$ for instance)
+  - I think it's because most of the points are on that pink-white arc from $(-6,2)$ -ish to the final destination $(0,0)$, so averaged across all ~8000 points, the path *is* mostly a walk down this valley.
+
+
+
