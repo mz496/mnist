@@ -61,3 +61,19 @@ def get_pca_directions_for_snapshots(snapshots: np.ndarray) -> tuple[np.ndarray,
     components = vt[:2]
     explained_variance_ratio = (s ** 2 / (s ** 2).sum())[:2]
     return components, explained_variance_ratio
+
+def project_snapshots_onto_pca_directions(snapshots: np.ndarray, theta_star: np.ndarray, snapshot_pca_directions: np.ndarray) -> np.ndarray:
+    """
+    Center each snapshot point (snapshots [n, D]) on theta_star ([D] broadcast to [n, D]) -> [n, D].
+
+    Then dot with PCA components (assumed to be orthonormal) [D, 2] to get per-snapshot points [n, 2].
+
+    Inputs:
+    - snapshots: [n, D]
+    - theta_star: [D]
+    - snapshot_pca_directions: [2, D]
+
+    Output:
+    - [n, 2] per-snapshot 2D points
+    """
+    return (snapshots - theta_star) @ snapshot_pca_directions.T

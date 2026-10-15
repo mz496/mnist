@@ -9,7 +9,7 @@ import numpy as np
 from mnist.config import load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
-from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots
+from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots, project_snapshots_onto_pca_directions
 from mnist.train import load_checkpoint, load_training_snapshots
 from mnist.utils import get_device
 
@@ -31,7 +31,11 @@ def main():
     print("MOVING MODEL TO DEVICE:", device)
     # Fetch saved weights from the run's best checkpoint (theta star)
     model = load_checkpoint(run_id, device)
-    theta_star = [p.detach().clone() for p in model.parameters()]
+    # TODO[trajectory-plotting] Don't load the best validation checkpoint when plotting trajectories. Use the final training snapshot as theta_star in that case.
+    theta_star: list[torch.Tensor] = [p.detach().clone() for p in model.parameters()]
+    # Vector form of theta_star for trajectory plotting, intentionally matching the vectorization of the snapshots
+    theta_star_vector: np.ndarray = torch.nn.utils.parameters_to_vector(model.parameters()).detach().cpu().numpy()
+
     model_shifted = copy.deepcopy(model)
 
     config = load_default_config()
@@ -82,21 +86,32 @@ def main():
             # Use training snapshots as the plotting plane and to plot the trajectory on that plane
 
             # TODO[trajectory-plotting] Load training snapshots for run id
+            # [n, D] where n is the number of snapshots
             snapshots = load_training_snapshots(run_id)
 
             # PCA on training snapshots; extract top 2
             snapshot_pca_directions, explained_variance = get_pca_directions_for_snapshots(snapshots)
-            # TODO[trajectory-plotting] Project the [2, D] vectors into [2, 2] using weight-space?
             print("SNAPSHOT PCA DIRECTIONS")
             print(snapshot_pca_directions)
             print("EXPLAINED VARIANCE")
             print(explained_variance)
+            d1 = snapshot_pca_directions[0]
+            d2 = snapshot_pca_directions[1]
             
-            # TODO[trajectory-plotting] Project each snapshot onto PCAs to get (alpha_s, beta_s) per-snapshot points
-            # Set xmin, xmax, ymin, ymax here
+            # Center each snapshot point (snapshots [n, D]) on theta_star [1, D], then project onto PCAs [2, D] to get per-snapshot points [n, 2]
+            points = project_snapshots_onto_pca_directions(snapshots, theta_star_vector, snapshot_pca_directions)
+            # float() so the bounds are known to be floats (numpy's min/max results are partly unknown to the type checker)
+            x_min, y_min = (float(v) for v in points.min(axis=0))
+            x_max, y_max = (float(v) for v in points.max(axis=0))
+            # the grid must include the origin (theta_star), and a margin so the path isn't on the border
+            x_min, x_max = min(x_min, 0.0), max(x_max, 0.0)
+            y_min, y_max = min(y_min, 0.0), max(y_max, 0.0)
+            x_pad, y_pad = 0.1 * (x_max - x_min), 0.1 * (y_max - y_min)
 
-            # TODO[trajectory-plotting] Save the file
-            pass
+            # Grid resolution.
+            num_points = 21
+            alphas = np.linspace(x_min - x_pad, x_max + x_pad, num_points)
+            betas = np.linspace(y_min - y_pad, y_max + y_pad, num_points)
         else:
             # Get two random directions in weight-space of the model
             # These will be our axes for plotting
@@ -104,12 +119,13 @@ def main():
             d1 = create_random_direction(model, args.seed)
             d2 = create_random_direction(model, args.seed + 1)
 
-        # In a grid from [-x,+x]*[-y,+y] eval as if the weights were shifted to that space
-        x_min = -1
-        x_max = 1
-        num_points = 21
-        alphas = np.linspace(x_min, x_max, num_points)
-        betas = np.linspace(x_min, x_max, num_points)
+            # In a grid from [-x,+x]*[-y,+y] eval as if the weights were shifted to that space
+            x_min = -1
+            x_max = 1
+            # Grid resolution.
+            num_points = 21
+            alphas = np.linspace(x_min, x_max, num_points)
+            betas = np.linspace(x_min, x_max, num_points)
 
         # Grids are indexed [beta, alpha]: rows are beta, columns are alpha
         loss_grid = np.zeros((len(betas), len(alphas)))
