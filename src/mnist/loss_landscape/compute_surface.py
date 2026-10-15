@@ -2,6 +2,7 @@
 import argparse
 import copy
 from pathlib import Path
+from typing import Any
 
 import torch
 import numpy as np
@@ -38,6 +39,7 @@ def main():
         snapshots = load_training_snapshots(run_id)
         # Theta star is the final training snapshot, not the best validation checkpoint
         model = LeNet5().to(device)
+        # Copy the final snapshot into the model parameters.
         torch.nn.utils.vector_to_parameters(torch.from_numpy(snapshots[-1]).to(device), model.parameters())
     else:
         # Fetch saved weights from the run's best checkpoint (theta star)
@@ -89,6 +91,9 @@ def main():
         print("Saved 1D sweep to", out_path)
 
     elif args.mode == "2d":
+        # (alpha, beta) of each training snapshot, only set in trajectory mode
+        trajectory_points: np.ndarray | None = None
+
         if args.trajectory_plot:
             # Use training snapshots as the plotting plane and to plot the trajectory on that plane
 
@@ -103,6 +108,7 @@ def main():
             
             # Center each snapshot point (snapshots [n, D]) on theta_star [1, D], then project onto PCAs [2, D] to get per-snapshot points [n, 2]
             points = project_snapshots_onto_pca_directions(snapshots, theta_star_vector, snapshot_pca_directions)
+            trajectory_points = points
             # float() so the bounds are known to be floats (numpy's min/max results are partly unknown to the type checker)
             x_min, y_min = (float(v) for v in points.min(axis=0))
             x_max, y_max = (float(v) for v in points.max(axis=0))
@@ -147,7 +153,11 @@ def main():
         # Save the raw numbers
         out_path = Path("plots") / f"{run_id}_2d.npz"
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        # TODO[trajectory-plotting] Write trajectory into the npz, if present
+        # The plot reads the "trajectory" key if it's present
+        # Typed as Any because numpy's savez stubs would otherwise read a **dict[str, ndarray] as possibly meant for its allow_pickle keyword
+        extra: dict[str, Any] = {}
+        if trajectory_points is not None:
+            extra["trajectory"] = trajectory_points  # [n, 2], (alpha, beta) per snapshot
         np.savez(
             out_path,
             alphas=alphas,
@@ -156,6 +166,7 @@ def main():
             acc=acc_grid,
             seed=np.array(args.seed),
             run_id=np.array(run_id),
+            **extra,
         )
         print("Saved 2D sweep to", out_path)
 

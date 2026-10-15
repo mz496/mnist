@@ -32,13 +32,12 @@ def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: 
     plt.close(fig)
 
 
-def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20) -> None:
+def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20, trajectory: np.ndarray | None = None) -> None:
     """
     Filled contour plot of a [len(betas), len(alphas)] grid, with the trained weights (alpha = beta = 0) marked.
     log_levels spaces the contour levels geometrically, which suits a loss that grows over orders of magnitude.
+    trajectory: optional [n, 2] array of (alpha, beta) points, the training path, drawn on top of the contour.
     """
-    # TODO[trajectory-plotting] Take in a list of points representing the path to plot on top of the contour; set range appropriately
-
     levels = np.geomspace(max(float(values.min()), 1e-6), float(values.max()), n_levels) if log_levels else n_levels
 
     fig, ax = plt.subplots(figsize=(7, 6))
@@ -46,8 +45,18 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
     ax.contour(alphas, betas, values, levels=levels, colors="k", linewidths=0.4)
     fig.colorbar(filled, ax=ax, label=title)
     ax.plot(0, 0, marker="*", color="white", markeredgecolor="k", markersize=14)  # θ*, the trained model
-    ax.set_xlabel("alpha (step along d1, relative to filter norm)")
-    ax.set_ylabel("beta (step along d2, relative to filter norm)")
+    if trajectory is None:
+        ax.set_xlabel("alpha (step along d1, relative to filter norm)")
+        ax.set_ylabel("beta (step along d2, relative to filter norm)")
+    else:
+        # PCA directions are unit vectors, so the axes are plain weight-space distance
+        ax.set_xlabel("alpha (PC1, weight-space distance)")
+        ax.set_ylabel("beta (PC2, weight-space distance)")
+        ax.plot(trajectory[:, 0], trajectory[:, 1], color="white", linewidth=1, zorder=3)
+        ax.scatter(trajectory[:, 0], trajectory[:, 1], color="red", s=8, zorder=4)
+        ax.plot(trajectory[0, 0], trajectory[0, 1], marker="o", color="lime", markeredgecolor="k", markersize=9, zorder=5, label="start")
+        ax.plot(trajectory[-1, 0], trajectory[-1, 1], marker="s", color="cyan", markeredgecolor="k", markersize=8, zorder=5, label="end")
+        ax.legend(loc="upper right")
     ax.set_aspect("equal")
     ax.set_title(title)
 
@@ -96,11 +105,13 @@ def main() -> None:
     elif args.npz.stem.endswith("_2d"):
         with np.load(args.npz) as data:
             alphas, betas, losses, accs = data["alphas"], data["betas"], data["loss"], data["acc"]
+            # Only present for sweeps run with --trajectory-plot
+            trajectory = data["trajectory"] if "trajectory" in data.files else None
         for name, values, log_levels in (("loss", losses, True), ("acc", accs, False)):
             out_path = args.npz.with_name(f"{args.npz.stem}_{name}_{args.style}.png")
             title = f"validation {'loss' if name == 'loss' else 'accuracy'}"
             if args.style == "contour":
-                plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels)
+                plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory)
             else:
                 plot_2d_surface(alphas, betas, values, out_path, title)
             print(f"Saved 2D {args.style} plot to", out_path)
