@@ -9,9 +9,15 @@ import numpy as np
 from matplotlib.colors import BoundaryNorm
 
 
-def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: Path, run_id: str | None = None) -> None:
+def split_label(split: str) -> str:
+    """The name of the data a sweep was measured on ("train" or "validation"), as it should appear in titles."""
+    return "training" if split == "train" else split
+
+
+def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: Path, run_id: str | None = None, split: str = "validation") -> None:
     """
-    Plot validation loss and accuracy along one direction through the trained weights.
+    Plot loss and accuracy along one direction through the trained weights.
+    split: which data the sweep was measured on, used in the axis labels.
     alphas: [N] step sizes along the direction (0 is the trained model)
     losses: [N] loss at each alpha
     accs:   [N] accuracy at each alpha
@@ -22,11 +28,11 @@ def plot_1d(alphas: np.ndarray, losses: np.ndarray, accs: np.ndarray, out_path: 
         fig.suptitle(f"run {run_id}")
 
     ax_loss.plot(alphas, losses, marker="o")
-    ax_loss.set_ylabel("validation loss")
+    ax_loss.set_ylabel(f"{split_label(split)} loss")
     ax_loss.axvline(0, color="gray", linestyle="--", linewidth=1)  # θ*, the trained model
 
     ax_acc.plot(alphas, accs, marker="o", color="tab:orange")
-    ax_acc.set_ylabel("validation accuracy")
+    ax_acc.set_ylabel(f"{split_label(split)} accuracy")
     ax_acc.set_xlabel("alpha (step along d1, relative to filter norm)")
     ax_acc.axvline(0, color="gray", linestyle="--", linewidth=1)
 
@@ -126,8 +132,10 @@ def main() -> None:
         with np.load(args.npz) as data:
             alphas, losses, accs = data["alphas"], data["loss"], data["acc"]
             run_id = str(data["run_id"]) if "run_id" in data.files else None
+            # Older files don't record the split; they were all measured on validation
+            split = str(data["split"]) if "split" in data.files else "validation"
         out_path = args.npz.with_suffix(".png")
-        plot_1d(alphas, losses, accs, out_path, run_id=run_id)
+        plot_1d(alphas, losses, accs, out_path, run_id=run_id, split=split)
         print("Saved 1D plot to", out_path)
     elif args.npz.stem.endswith("_2d"):
         with np.load(args.npz) as data:
@@ -136,9 +144,11 @@ def main() -> None:
             trajectory = data["trajectory"] if "trajectory" in data.files else None
             explained_variance = data["explained_variance"] if "explained_variance" in data.files else None
             run_id = str(data["run_id"]) if "run_id" in data.files else None
+            # Older files don't record the split; they were all measured on validation
+            split = str(data["split"]) if "split" in data.files else "validation"
         for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
             out_path = args.npz.with_name(f"{args.npz.stem}_{name}_{args.style}.png")
-            title = f"validation {'loss' if name == 'loss' else 'accuracy'}"
+            title = f"{split_label(split)} {'loss' if name == 'loss' else 'accuracy'}"
             if args.style == "contour":
                 plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance)
             else:

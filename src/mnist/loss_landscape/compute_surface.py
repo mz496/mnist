@@ -87,6 +87,7 @@ def main():
             acc=np.array(accs),
             seed=np.array(args.seed),
             run_id=np.array(run_id),
+            split=np.array("validation"),  # which data the loss and accuracy were measured on
         )
         print("Saved 1D sweep to", out_path)
 
@@ -95,6 +96,11 @@ def main():
         # The plot reads these keys if they're present.
         # Typed as Any because numpy's savez stubs would otherwise read a **dict[str, ndarray] as possibly meant for its allow_pickle keyword
         extra: dict[str, Any] = {}
+
+        # In trajectory mode, measure the loss on a fixed training subset: it's the loss the optimizer was descending.
+        # Otherwise use the validation set.
+        split = "train" if args.trajectory_plot else "validation"
+        eval_loader = data.train_subset if args.trajectory_plot else data.validation
 
         if args.trajectory_plot:
             # Use training snapshots as the plotting plane and to plot the trajectory on that plane
@@ -149,7 +155,7 @@ def main():
                         # Shift the model alpha steps in the direction d1 and beta steps in the direction d2
                         p.copy_(w + float(alpha) * u + float(beta) * v)
                     # Evaluate at that point
-                    loss_grid[j, i], acc_grid[j, i] = evaluate(model_shifted, data.validation, device)
+                    loss_grid[j, i], acc_grid[j, i] = evaluate(model_shifted, eval_loader, device)
             print(f"2D sweep: finished row {j + 1}/{len(betas)} (beta = {beta:.2f})")
 
         # Save the raw numbers
@@ -163,6 +169,7 @@ def main():
             acc=acc_grid,
             seed=np.array(args.seed),
             run_id=np.array(run_id),
+            split=np.array(split),  # which data the loss and accuracy were measured on
             **extra,
         )
         print("Saved 2D sweep to", out_path)

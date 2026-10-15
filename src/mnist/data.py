@@ -17,9 +17,14 @@ class InputDatasetItem(TypedDict):
     image: Tensor # [1, 28, 28], of uint8s (0-255)
     label: Tensor # 0-dim - a single number from 0 to 9
 
+# Size of the fixed training subset, the same as the validation set so evaluating on it costs the same.
+TRAIN_SUBSET_SIZE = 5000
+
 @dataclass
 class Dataloaders:
     train: DataLoader[InputDatasetItem]
+    # The first TRAIN_SUBSET_SIZE examples of the training split, unshuffled: for evaluating the loss on training data cheaply
+    train_subset: DataLoader[InputDatasetItem]
     validation: DataLoader[InputDatasetItem]
     test: DataLoader[InputDatasetItem]
 
@@ -41,5 +46,9 @@ def get_dataloaders(data_config: DataConfig) -> Dataloaders:
     validation_loader = DataLoader(cast(TorchDataset[InputDatasetItem], validation_arrow_dataset), batch_size=data_config.batch_size, shuffle=False, collate_fn=collate)
     test_loader = DataLoader(cast(TorchDataset[InputDatasetItem], test_arrow_dataset), batch_size=data_config.batch_size, shuffle=False, collate_fn=collate)
 
-    return Dataloaders(train=train_loader, validation=validation_loader, test=test_loader)
+    # train_test_split shuffled the training split, so its first rows are already a random sample
+    train_subset_arrow_dataset: ArrowDataset = train_arrow_dataset.select(range(TRAIN_SUBSET_SIZE))  # pyright: ignore[reportUnknownMemberType] Bad stubs from the datasets lib.
+    train_subset_loader = DataLoader(cast(TorchDataset[InputDatasetItem], train_subset_arrow_dataset), batch_size=data_config.batch_size, shuffle=False, collate_fn=collate)
+
+    return Dataloaders(train=train_loader, train_subset=train_subset_loader, validation=validation_loader, test=test_loader)
 
