@@ -122,13 +122,14 @@ The algorithm is:
 ![](img/2026-10-14T19:28:51_45xyzktb_2d_acc_contour.png)
 
 A few observations:
-- This does not quite capture that early training dropoff I was hoping for
-- The training path cuts across the gradient, probably because of earlier movement in some other dimension.
+- This does not quite capture that early training dropoff I was hoping for, and that part of the path cuts across the gradient, probably because of earlier movement in some other dimension.
   - I think it's because we spend ~10 points covering that ground and the remaining ~8000 elsewhere.
 - The final network projection is a valley in these particular dimensions instead of the round plots from earlier
   - It's not a zoom issue (as in looking very closely at a side of the bowl only; you can see the other side of the valley at the lower right)
   - It's not an aspect ratio issue (one unit on $x$ is the same size as one unit on $y$ for instance)
   - I think it's because most of the points are on that pink-white arc from $(-6,2)$ -ish to the final destination $(0,0)$, so averaged across all ~8000 points, the path *is* mostly a walk down this valley.
+- I am a bit surprised to find that we spend so many steps continuing to walk down this valley; by step ~500 of ~8000 we are already at a loss of less than 0.5. But maybe that's not surprising as I didn't tune learning rate (0.01) or momentum (0.9) at all.
 
+![](img/2026-10-15-loss-at-500.png)
 
 
