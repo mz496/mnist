@@ -146,7 +146,6 @@ def main():
                         # Shift the model alpha steps in the direction d1 and beta steps in the direction d2
                         p.copy_(w + float(alpha) * u + float(beta) * v)
                     # Evaluate at that point
-                    # TODO[trajectory-plotting] WIth trajectory, plot the loss grid on the same data.
                     loss_grid[j, i], acc_grid[j, i] = evaluate(model_shifted, data.validation, device)
             print(f"2D sweep: finished row {j + 1}/{len(betas)} (beta = {beta:.2f})")
 

@@ -25,6 +25,7 @@ class Dataloaders:
 
 # Mapping from input data. 
 def collate(inputs: list[InputDatasetItem]) -> tuple[Tensor, Tensor]:
+    # TODO: What happens if we do/dont center the data as a startpoint?
     images = torch.stack([i["image"] for i in inputs]).float() / 255  # [B, 1, 28, 28], of float32s
     labels = torch.stack([i["label"] for i in inputs])  # [B], int64
     return images, labels
