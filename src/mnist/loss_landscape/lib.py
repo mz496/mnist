@@ -1,7 +1,9 @@
+import copy
 from typing import Literal
-from torch import Generator, Tensor, nn, randn
 
 import numpy as np
+import torch
+from torch import Generator, Tensor, nn, randn
 
 """
 Heavily inspired by https://github.com/tomgoldstein/loss-landscape
@@ -77,3 +79,22 @@ def project_snapshots_onto_pca_directions(snapshots: np.ndarray, theta_star: np.
     - [n, 2] per-snapshot 2D points
     """
     return (snapshots - theta_star) @ snapshot_pca_directions.T
+
+
+def unflatten_like(vector: np.ndarray, model: nn.Module) -> list[Tensor]:
+    """
+    Split a flat [D] vector into one tensor per parameter, shaped and placed like model.parameters().
+    Uses vector_to_parameters, the inverse of parameters_to_vector that flattened the training snapshots, so the layer
+    order can't drift from how the snapshots were made.
+    """
+    parameters = list(model.parameters())
+    expected = sum(p.numel() for p in parameters)
+    # vector_to_parameters ignores extra entries and gives an obscure error for missing ones, so check the length here
+    if len(vector) != expected:
+        raise ValueError(f"vector has {len(vector)} entries, the model has {expected} parameters")
+    scratch = copy.deepcopy(model)
+    first = parameters[0]
+    flat = torch.from_numpy(vector).to(device=first.device, dtype=first.dtype)  # pyright: ignore[reportUnknownMemberType] Bad stubs from torch.
+    torch.nn.utils.vector_to_parameters(flat, scratch.parameters())
+    # vector_to_parameters makes the parameters views into `flat`, so clone to hand back independent tensors
+    return [p.detach().clone() for p in scratch.parameters()]

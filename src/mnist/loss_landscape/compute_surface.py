@@ -10,7 +10,7 @@ import numpy as np
 from mnist.config import load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
-from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots, project_snapshots_onto_pca_directions
+from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots, project_snapshots_onto_pca_directions, unflatten_like
 from mnist.model import LeNet5
 from mnist.train import SNAPSHOT_SPACING, load_checkpoint, load_training_snapshots
 from mnist.loss_landscape.file_io_utils import SCHEMA_VERSION
@@ -125,31 +125,15 @@ def main():
             # Use training snapshots as the plotting plane and to plot the trajectory on that plane
 
             # PCA on training snapshots; extract top 2
-            # TODO 10-15: A very bad bug here where d1 and d2 are not actually the correct types.
-            # The random directions correctly gives list[Tensor] of length 10:
-            """
-            ┌───────┬───────────────┬────────────┐
-            │ layer │ weight shape  │ bias shape │
-            ├───────┼───────────────┼────────────┤
-            │ conv1 │ [6, 1, 5, 5]  │ [6]        │
-            ├───────┼───────────────┼────────────┤
-            │ conv2 │ [16, 6, 5, 5] │ [16]       │
-            ├───────┼───────────────┼────────────┤
-            │ fc1   │ [120, 400]    │ [120]      │
-            ├───────┼───────────────┼────────────┤
-            │ fc2   │ [84, 120]     │ [84]       │
-            ├───────┼───────────────┼────────────┤
-            │ fc3   │ [10, 84]      │ [10]       │
-            └───────┴───────────────┴────────────┘
-            """
-            # But snapshot_pca_directions are each [D] so zipping just looks at each number and stops after the first 10.
             snapshot_pca_directions, explained_variance = get_pca_directions_for_snapshots(snapshots)
             print("SNAPSHOT PCA DIRECTIONS")
             print(snapshot_pca_directions)
             print("EXPLAINED VARIANCE")
             print(explained_variance)
-            d1 = snapshot_pca_directions[0]
-            d2 = snapshot_pca_directions[1]
+            # The components are flat [D] vectors. The grid loop zips over per-layer tensors, as create_random_direction gives,
+            # so split each one into one tensor per model parameter.
+            d1 = unflatten_like(snapshot_pca_directions[0], model)
+            d2 = unflatten_like(snapshot_pca_directions[1], model)
             
             # Center each snapshot point (snapshots [n, D]) on theta_star [1, D], then project onto PCAs [2, D] to get per-snapshot points [n, 2]
             points = project_snapshots_onto_pca_directions(snapshots, theta_star_vector, snapshot_pca_directions)
