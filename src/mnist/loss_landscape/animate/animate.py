@@ -2,17 +2,30 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 
 """
-Animate a training run's path across the loss surface of its full-run PCA plane.
+Animate a training run's path across the loss surface of a PCA plane of its training snapshots.
 
-Every frame uses the same plane and the same scales as the static full-run plot. The sweep file already holds every
-snapshot projected onto that plane, so frame f just draws the first f * snapshots_per_frame of those points and shows the last
-one as the newest dot. The plane and the contour are never refit or recomputed, so nothing can drift between frames.
+## The plane
 
-The network itself is evaluated, in two ways. Each dot is colored by the loss of the network at that training step, and
-each frame prints the loss and accuracy of the network at its step. These are measured by running the snapshot's weights
-over the data. And the contour of each frame is evaluated again: it is the loss of the network on the grid of the PCA plane
-shifted to pass through the network at that frame's step. The plane's directions and its (alpha, beta) axes never change,
-so the network at the frame's step sits exactly on its own frame's surface, at the dot.
+- The two axes are the top two PCA directions as unit direction vectors alpha, beta (or d1, d2) in weight-space of all training snapshots in the video's window.
+    - Note that this can be either the full run, or some prefix via max_steps.
+- The origin (0, 0) is the final snapshot of the window, so the path always ends there. The final frame is thus equal to the plot of the full path.
+- The plane and range (min/max x/y) are fixed for every frame.
+
+## The points
+
+- These come from the grid_sweep file. Each point represents a training snapshot.
+- A point's (u, v) coordinate is the snapshot minus the final snapshot, dotted with the two unit direction vectors, to plot it into the fixed plane.
+- Loss values per-point are measured by running the snapshot's weights over the data, not read off the contour, as that is only correct for the current frame and point.
+  - "Correct" is a bit lossy here since the grid resolution is low, but it would theoretically be correct.
+  - Also note that we need to measure loss on the same training subset the optimizer was descending.
+
+## The contour
+
+- In frame n, the grid point (u, v) contour value is the weights
+base_n + u * d1 + v * d2, where base_n = snapshot_n - u_n * d1 - v_n * d2:
+the plane parallel to the PCA plane that passes through snapshot n.
+    
+- This means that at frame n's own dot, the weights are snapshot n exactly, so the contour there reads the network's measured loss.
 """
 
 import matplotlib
@@ -277,7 +290,7 @@ def render_video(scene: Scene, counts: list[int], fps: int, out_path: Path) -> N
             writer.grab_frame()
 
 
-# ---- The preview: render three frames and check that the scales really are frozen ----
+# ---- The preview: render the first, middle and last frames and check that they are drawn right ----
 
 
 @dataclass
