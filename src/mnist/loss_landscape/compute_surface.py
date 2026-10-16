@@ -88,6 +88,7 @@ def main():
             seed=np.array(args.seed),
             run_id=np.array(run_id),
             split=np.array("validation"),  # which data the loss and accuracy were measured on
+            mode=np.array(args.mode),  # "1d": the plot reads this to know what kind of sweep the file is
         )
         print("Saved 1D sweep to", out_path)
 
@@ -170,6 +171,7 @@ def main():
             seed=np.array(args.seed),
             run_id=np.array(run_id),
             split=np.array(split),  # which data the loss and accuracy were measured on
+            mode=np.array(args.mode),  # "2d": the plot reads this to know what kind of sweep the file is
             **extra,
         )
         print("Saved 2D sweep to", out_path)

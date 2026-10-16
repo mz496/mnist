@@ -142,45 +142,55 @@ def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Draw a plot from an .npz saved by compute_surface")
-    parser.add_argument("npz", type=Path, help="path to a sweep; the _1d / _2d suffix of the name picks the plot, e.g. plots/abc123_2d.npz")
+    parser.add_argument("npz", type=Path, help="path to a sweep saved by compute_surface, e.g. plots/abc123_2d.npz. The file's mode key says whether it is a 1d or a 2d sweep")
     parser.add_argument("--style", choices=["contour", "surface"], default="contour", help="2D plots only")
     return parser.parse_args()
+
+
+def draw_1d(npz: Path, data: np.lib.npyio.NpzFile) -> None:
+    alphas, losses, accs = data["alphas"], data["loss"], data["acc"]
+    run_id = str(data["run_id"]) if "run_id" in data.files else None
+    # Older files don't record the split; they were all measured on validation
+    split = str(data["split"]) if "split" in data.files else "validation"
+    out_path = npz.with_suffix(".png")
+    plot_1d(alphas, losses, accs, out_path, run_id=run_id, split=split)
+    print("Saved 1D plot to", out_path)
+
+
+def draw_2d(npz: Path, data: np.lib.npyio.NpzFile, style: str) -> None:
+    alphas, betas, losses, accs = data["alphas"], data["betas"], data["loss"], data["acc"]
+    # Only present for sweeps run with --trajectory-plot
+    trajectory = data["trajectory"] if "trajectory" in data.files else None
+    explained_variance = data["explained_variance"] if "explained_variance" in data.files else None
+    run_id = str(data["run_id"]) if "run_id" in data.files else None
+    # Older files don't record the split; they were all measured on validation
+    split = str(data["split"]) if "split" in data.files else "validation"
+    # The loss at each path point, read off the saved loss grid at that point's position. Not recomputed per snapshot.
+    trajectory_loss = sample_grid(alphas, betas, losses, trajectory) if trajectory is not None else None
+    for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
+        out_path = npz.with_name(f"{npz.stem}_{name}_{style}.png")
+        title = f"{split_label(split)} {'loss' if name == 'loss' else 'accuracy'}"
+        if style == "contour":
+            plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance, trajectory_loss=trajectory_loss, trajectory_loss_label=f"{split_label(split)} loss at path point (from the grid)")
+        else:
+            plot_2d_surface(alphas, betas, values, out_path, title, run_id=run_id)
+        print(f"Saved 2D {style} plot to", out_path)
 
 
 def main() -> None:
     args = parse_args()
     if not args.npz.is_file():
         raise FileNotFoundError(f"sweep file not found: {args.npz}")
-    if args.npz.stem.endswith("_1d"):
-        with np.load(args.npz) as data:
-            alphas, losses, accs = data["alphas"], data["loss"], data["acc"]
-            run_id = str(data["run_id"]) if "run_id" in data.files else None
-            # Older files don't record the split; they were all measured on validation
-            split = str(data["split"]) if "split" in data.files else "validation"
-        out_path = args.npz.with_suffix(".png")
-        plot_1d(alphas, losses, accs, out_path, run_id=run_id, split=split)
-        print("Saved 1D plot to", out_path)
-    elif args.npz.stem.endswith("_2d"):
-        with np.load(args.npz) as data:
-            alphas, betas, losses, accs = data["alphas"], data["betas"], data["loss"], data["acc"]
-            # Only present for sweeps run with --trajectory-plot
-            trajectory = data["trajectory"] if "trajectory" in data.files else None
-            explained_variance = data["explained_variance"] if "explained_variance" in data.files else None
-            run_id = str(data["run_id"]) if "run_id" in data.files else None
-            # Older files don't record the split; they were all measured on validation
-            split = str(data["split"]) if "split" in data.files else "validation"
-        # The loss at each path point, read off the saved loss grid at that point's position. Not recomputed per snapshot.
-        trajectory_loss = sample_grid(alphas, betas, losses, trajectory) if trajectory is not None else None
-        for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
-            out_path = args.npz.with_name(f"{args.npz.stem}_{name}_{args.style}.png")
-            title = f"{split_label(split)} {'loss' if name == 'loss' else 'accuracy'}"
-            if args.style == "contour":
-                plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance, trajectory_loss=trajectory_loss, trajectory_loss_label=f"{split_label(split)} loss at path point (from the grid)")
-            else:
-                plot_2d_surface(alphas, betas, values, out_path, title, run_id=run_id)
-            print(f"Saved 2D {args.style} plot to", out_path)
-    else:
-        raise ValueError(f"expected a file name ending in _1d or _2d, got {args.npz.name}")
+    with np.load(args.npz) as data:
+        if "mode" not in data.files:
+            raise ValueError(f"{args.npz} has no 'mode' key, so it can't be told apart as a 1d or 2d sweep. Regenerate it with the current compute_surface.")
+        mode = str(data["mode"])
+        if mode == "1d":
+            draw_1d(args.npz, data)
+        elif mode == "2d":
+            draw_2d(args.npz, data, args.style)
+        else:
+            raise ValueError(f"unknown mode {mode!r} in {args.npz}, expected '1d' or '2d'")
 
 
 if __name__ == "__main__":
