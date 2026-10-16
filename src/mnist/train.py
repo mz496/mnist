@@ -14,6 +14,10 @@ import torch
 from torch.nn import Module
 from datetime import datetime
 
+# Steps between training snapshots. Snapshot row i is training step (i + 1) * SNAPSHOT_SPACING,
+# which is how loss_landscape/compute_surface turns a step number into a row count.
+SNAPSHOT_SPACING = 10
+
 def main():
     config = load_default_config()
     print("USING MODEL CONFIG")
@@ -50,9 +54,7 @@ def main():
     # Fill a snapshot buffer, fill it, then write it to disk at the end
     # We could preallocate but the calculation is too annoying.
 
-    # Spacing of each snapshot.
-    snapshot_spacing = 10
-    # Each row is a weight snapshot.
+    # Each row is a weight snapshot, taken every SNAPSHOT_SPACING steps.
     training_snapshot_vectors: list[torch.Tensor] = []
 
     for epoch in range(epoch_count):
@@ -86,7 +88,7 @@ def main():
                 train_loss_value = train_loss.item()
                 wandb.log({"train/loss": train_loss_value, "step_number": step_number})
             
-            if step_number % snapshot_spacing == 0:
+            if step_number % SNAPSHOT_SPACING == 0:
                 # parameters_to_vector takes a copy, then we detach it from the autograd graph, then move it to the CPU
                 training_snapshot_vectors.append(torch.nn.utils.parameters_to_vector(model.parameters()).detach().cpu())
         
