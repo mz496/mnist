@@ -12,7 +12,7 @@ from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
 from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots, project_snapshots_onto_pca_directions
 from mnist.model import LeNet5
-from mnist.train import load_checkpoint, load_training_snapshots
+from mnist.train import SNAPSHOT_SPACING, load_checkpoint, load_training_snapshots
 from mnist.loss_landscape.file_io_utils import SCHEMA_VERSION
 from mnist.utils import get_device
 
@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("run_id", type=str, help="run id of a training run, i.e. the name of its folder under checkpoints/, e.g. 2026-10-14T19:28:51_45xyzktb (loads checkpoints/<run_id>/best_validation_loss.pt)")
     parser.add_argument("--trajectory-plot", action="store_true", help="turn on non-random directions mode to plot trajectories (uses the training snapshots' PCA directions for this run id instead, and centers on the final training snapshot rather than the best validation checkpoint)")
+    parser.add_argument("--max-step", type=int, default=None, help="with --trajectory-plot, use only the training snapshots up to this step (e.g. 600), centered on the last of them. Rounds down to a multiple of the snapshot spacing")
     parser.add_argument("--seed", type=int, default=0, help="when in random direction mode, seed for the randomness (2d mode also uses seed + 1)")
     parser.add_argument("--mode", choices=["1d", "2d"], default="1d", help="sweep along one direction or over a 2D grid")
     return parser.parse_args()
@@ -34,11 +35,24 @@ def main():
     print("MOVING MODEL TO DEVICE:", device)
     if args.trajectory_plot and args.mode == "1d":
         raise Exception("trajectory plot not supported for 1D")
+    if args.max_step is not None and not args.trajectory_plot:
+        raise Exception("--max-step only applies with --trajectory-plot")
+
+    # The last training step of the window of snapshots used, only set with --max-step. It can be below --max-step if
+    # that wasn't a multiple of the snapshot spacing.
+    window_last_step: int | None = None
 
     if args.trajectory_plot:
         # [n, D] where n is the number of snapshots
         snapshots = load_training_snapshots(run_id)
-        # Theta star is the final training snapshot, not the best validation checkpoint
+        if args.max_step is not None:
+            # Snapshot row i is training step (i + 1) * SNAPSHOT_SPACING, so the steps up to max_step are the first rows
+            n_keep = args.max_step // SNAPSHOT_SPACING
+            if not 3 <= n_keep <= len(snapshots):
+                raise ValueError(f"--max-step {args.max_step} keeps {n_keep} snapshots, but it needs between 3 and {len(snapshots)}")
+            snapshots = snapshots[:n_keep]
+            window_last_step = n_keep * SNAPSHOT_SPACING
+        # Theta star is the final training snapshot (of the window, if --max-step is set), not the best validation checkpoint
         model = LeNet5().to(device)
         # Copy the final snapshot into the model parameters.
         torch.nn.utils.vector_to_parameters(torch.from_numpy(snapshots[-1]).to(device), model.parameters())
@@ -99,6 +113,8 @@ def main():
         # The plot reads these keys if they're present.
         # Typed as Any because numpy's savez stubs would otherwise read a **dict[str, ndarray] as possibly meant for its allow_pickle keyword
         extra: dict[str, Any] = {}
+        # Added to the output name when only a window of the training run is used, so it doesn't overwrite the full-run file
+        window_tag = ""
 
         # In trajectory mode, measure the loss on a fixed training subset: it's the loss the optimizer was descending.
         # Otherwise use the validation set.
@@ -109,6 +125,24 @@ def main():
             # Use training snapshots as the plotting plane and to plot the trajectory on that plane
 
             # PCA on training snapshots; extract top 2
+            # TODO 10-15: A very bad bug here where d1 and d2 are not actually the correct types.
+            # The random directions correctly gives list[Tensor] of length 10:
+            """
+            ┌───────┬───────────────┬────────────┐
+            │ layer │ weight shape  │ bias shape │
+            ├───────┼───────────────┼────────────┤
+            │ conv1 │ [6, 1, 5, 5]  │ [6]        │
+            ├───────┼───────────────┼────────────┤
+            │ conv2 │ [16, 6, 5, 5] │ [16]       │
+            ├───────┼───────────────┼────────────┤
+            │ fc1   │ [120, 400]    │ [120]      │
+            ├───────┼───────────────┼────────────┤
+            │ fc2   │ [84, 120]     │ [84]       │
+            ├───────┼───────────────┼────────────┤
+            │ fc3   │ [10, 84]      │ [10]       │
+            └───────┴───────────────┴────────────┘
+            """
+            # But snapshot_pca_directions are each [D] so zipping just looks at each number and stops after the first 10.
             snapshot_pca_directions, explained_variance = get_pca_directions_for_snapshots(snapshots)
             print("SNAPSHOT PCA DIRECTIONS")
             print(snapshot_pca_directions)
@@ -121,6 +155,9 @@ def main():
             points = project_snapshots_onto_pca_directions(snapshots, theta_star_vector, snapshot_pca_directions)
             extra["trajectory"] = points  # [n, 2], (alpha, beta) per snapshot
             extra["explained_variance"] = explained_variance  # [2], fraction of the snapshots' variance along PC1, PC2
+            if window_last_step is not None:
+                extra["max_step"] = np.array(window_last_step)
+                window_tag = f"_first{window_last_step}"
             # float() so the bounds are known to be floats (numpy's min/max results are partly unknown to the type checker)
             x_min, y_min = (float(v) for v in points.min(axis=0))
             x_max, y_max = (float(v) for v in points.max(axis=0))
@@ -162,7 +199,7 @@ def main():
             print(f"2D sweep: finished row {j + 1}/{len(betas)} (beta = {beta:.2f})")
 
         # Save the raw numbers
-        out_path = Path("plots") / f"{run_id}_2d.npz"
+        out_path = Path("plots") / f"{run_id}{window_tag}_2d.npz"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         np.savez(
             out_path,

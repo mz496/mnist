@@ -11,9 +11,11 @@ Ideally also encompasses load() and save().
 # Version of the loss landscape .npz layout. compute_surface writes it into every file and plot refuses a file whose
 # major version differs from this one.
 # Bump the minor version when a key is added. Bump the major version when a key is removed, renamed, or changes meaning.
-# Version 0.1 keys, for both modes: alphas, loss, acc, seed, run_id, split, mode, schema_version.
+# Version 0.2 keys, for both modes: alphas, loss, acc, seed, run_id, split, mode, schema_version.
 # 2d adds betas. 2d with --trajectory-plot adds trajectory and explained_variance.
-SCHEMA_VERSION = "0.1"
+# 2d with --trajectory-plot and --max-step adds max_step, the last training step in the window.
+# 0.2 only added max_step to 0.1, so a reader of one can read the other.
+SCHEMA_VERSION = "0.2"
 
 
 def major_version(version: str) -> int:

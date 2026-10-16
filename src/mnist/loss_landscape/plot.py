@@ -12,6 +12,11 @@ from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 from mnist.loss_landscape.file_io_utils import check_schema_version, read_str
 
 
+def run_label(run_id: str, max_step: int | None) -> str:
+    """The run line of a title, naming the window of training steps when the sweep used only the first ones."""
+    return f"run {run_id}" if max_step is None else f"run {run_id}, first {max_step} steps"
+
+
 def split_label(split: str) -> str:
     """The name of the data a sweep was measured on ("train" or "validation"), as it should appear in titles."""
     return "training" if split == "train" else split
@@ -62,7 +67,7 @@ def sample_grid(alphas: np.ndarray, betas: np.ndarray, grid: np.ndarray, points:
     )
 
 
-def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20, trajectory: np.ndarray | None = None, log_error_levels: bool = False, run_id: str | None = None, explained_variance: np.ndarray | None = None, trajectory_loss: np.ndarray | None = None, trajectory_loss_label: str = "loss") -> None:
+def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, log_levels: bool = True, n_levels: int = 20, trajectory: np.ndarray | None = None, log_error_levels: bool = False, run_id: str | None = None, explained_variance: np.ndarray | None = None, trajectory_loss: np.ndarray | None = None, trajectory_loss_label: str = "loss", max_step: int | None = None) -> None:
     """
     Filled contour plot of a [len(betas), len(alphas)] grid, with the trained weights (alpha = beta = 0) marked.
     log_levels spaces the contour levels geometrically, which suits a loss that grows over orders of magnitude.
@@ -70,13 +75,19 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
     so they crowd toward 1.0, where a plain linear or log scale on the value itself would look flat.
     trajectory: optional [n, 2] array of (alpha, beta) points, the training path, drawn on top of the contour.
     run_id: shown in the title, if given.
+    max_step: the last training step of the window the sweep used, shown in the title next to the run id.
     explained_variance: optional [2] fraction of the snapshots' variance along PC1 and PC2, shown in the axis labels.
     """
     levels: np.ndarray | int
     # By default the colors follow the value linearly, so levels crowded near 1.0 would all land on one end of the colormap.
     # A BoundaryNorm gives each band its own equal step of the colormap instead.
     norm: BoundaryNorm | None = None
-    if log_error_levels:
+    # A grid with a single value, such as a plateau where every point in a small window predicts the same, has no spread
+    # to space contour levels over. Draw it as one band.
+    flat = float(values.max() - values.min()) == 0.0
+    if flat:
+        levels = np.array([float(values.min()) - 5e-4, float(values.max()) + 5e-4])
+    elif log_error_levels:
         errors = np.geomspace(max(1.0 - float(values.max()), 1e-6), 1.0 - float(values.min()), n_levels)
         levels = 1.0 - errors[::-1]  # reversed so the levels increase
         norm = BoundaryNorm(levels, ncolors=256)
@@ -87,7 +98,8 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
 
     fig, ax = plt.subplots(figsize=(7, 6))
     filled = ax.contourf(alphas, betas, values, levels=levels, norm=norm)
-    ax.contour(alphas, betas, values, levels=levels, colors="k", linewidths=0.4)
+    if not flat:
+        ax.contour(alphas, betas, values, levels=levels, colors="k", linewidths=0.4)
     fig.colorbar(filled, ax=ax, label=title)
     ax.plot(0, 0, marker="*", color="white", markeredgecolor="k", markersize=14)  # θ*, the trained model
     if trajectory is None:
@@ -113,7 +125,7 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
         ax.plot(trajectory[-1, 0], trajectory[-1, 1], marker="s", color="cyan", markeredgecolor="k", markersize=8, zorder=5, label="end")
         ax.legend(loc="upper right")
     ax.set_aspect("equal")
-    ax.set_title(title if run_id is None else f"{title}\nrun {run_id}")
+    ax.set_title(title if run_id is None else f"{title}\n{run_label(run_id, max_step)}")
 
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -121,10 +133,11 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
     plt.close(fig)
 
 
-def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, run_id: str | None = None) -> None:
+def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, run_id: str | None = None, max_step: int | None = None) -> None:
     """
     3D surface plot of a [len(betas), len(alphas)] grid.
     run_id: shown in the title, if given.
+    max_step: the last training step of the window the sweep used, shown in the title next to the run id.
     """
     alpha_mesh, beta_mesh = np.meshgrid(alphas, betas)
 
@@ -135,7 +148,7 @@ def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
     ax.set_ylabel("beta (d2)")
     ax.set_zlabel(title)
     if run_id is not None:
-        ax.set_title(f"{title}\nrun {run_id}")
+        ax.set_title(f"{title}\n{run_label(run_id, max_step)}")
 
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,15 +179,17 @@ def draw_2d(npz: Path, data: np.lib.npyio.NpzFile, style: str, stamp: str) -> No
     explained_variance = data["explained_variance"] if "explained_variance" in data.files else None
     run_id = read_str(npz, data, "run_id")
     split = read_str(npz, data, "split")
+    # Only present for sweeps run with --max-step
+    max_step = int(data["max_step"]) if "max_step" in data.files else None
     # The loss at each path point, read off the saved loss grid at that point's position. Not recomputed per snapshot.
     trajectory_loss = sample_grid(alphas, betas, losses, trajectory) if trajectory is not None else None
     for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
         out_path = npz.with_name(f"{npz.stem}_{name}_{style}_{stamp}.png")
         title = f"{split_label(split)} {'loss' if name == 'loss' else 'accuracy'}"
         if style == "contour":
-            plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance, trajectory_loss=trajectory_loss, trajectory_loss_label=f"{split_label(split)} loss at path point (from the grid)")
+            plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance, trajectory_loss=trajectory_loss, trajectory_loss_label=f"{split_label(split)} loss at path point (from the grid)", max_step=max_step)
         else:
-            plot_2d_surface(alphas, betas, values, out_path, title, run_id=run_id)
+            plot_2d_surface(alphas, betas, values, out_path, title, run_id=run_id, max_step=max_step)
         print(f"Saved 2D {style} plot to", out_path)
 
 
