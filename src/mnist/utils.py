@@ -1,4 +1,5 @@
 import random
+from datetime import datetime
 import numpy as np
 import torch
 
@@ -14,3 +15,6 @@ def get_device():
         else "mps" if torch.backends.mps.is_available()
         else "cpu"
     )
+
+def timestamp() -> str:
+    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")

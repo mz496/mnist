@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -50,3 +51,16 @@ def load_config(path: str | Path) -> Config:
 
 def load_default_config() -> Config:
     return load_config("configs/default.yaml")
+
+
+def with_overrides(config: Config, overrides: dict[str, Any]) -> Config:
+    """
+    Returns a new Config with dotted keys (e.g. "train.learning_rate") replaced, re-validated.
+    """
+    raw = config.model_dump()
+    for dotted, value in overrides.items():
+        section, _, key = dotted.partition(".")
+        if section not in raw or key not in raw[section]:
+            raise KeyError(f"unknown config key: {dotted}")
+        raw[section][key] = value
+    return Config(**raw)

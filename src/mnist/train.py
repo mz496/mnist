@@ -4,22 +4,26 @@ from typing import cast
 import numpy as np
 import wandb
 
-from mnist.config import load_default_config
+from mnist.config import Config, load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
 from mnist.type_aliases import CrossEntropyLossFunction
-from mnist.utils import set_seed, get_device
+from mnist.utils import set_seed, get_device, timestamp
 from mnist.model import LeNet5
 import torch
 from torch.nn import Module
-from datetime import datetime
 
 # Steps between training snapshots. Snapshot row i is training step (i + 1) * SNAPSHOT_SPACING,
 # which is how loss_landscape/plot/grid_sweep turns a step number into a row count.
 SNAPSHOT_SPACING = 10
 
-def main():
-    config = load_default_config()
+def train(config: Config, group: str | None = None, tag: str | None = None, run: wandb.Run | None = None, save_snapshots: bool = True) -> str:
+    """
+    Trains one model with `config` and returns its run_id.
+    `group` groups runs together in W&B; `tag` is the W&B display name (defaults to the timestamp).
+    Pass `run` when the caller already initialised it (e.g. a W&B sweep agent); otherwise one is created.
+    `save_snapshots` controls whether weight snapshots for the loss landscape plots are collected and written.
+    """
     print("USING MODEL CONFIG")
     print(config)
 
@@ -35,8 +39,10 @@ def main():
     loss_fn = cast(CrossEntropyLossFunction, torch.nn.CrossEntropyLoss())
 
     # W&B plumbing
-    name = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    run = wandb.init(project="mnist", name=name, config=config.model_dump())
+    name = timestamp()
+    owns_run = run is None
+    if run is None:
+        run = wandb.init(project="mnist", name=tag or name, group=group, config=config.model_dump())
     # A unique and sortable run ID to identify this run.
     run_id = f"{name}_{run.id}"
     wandb.define_metric("step_number", hidden=True)
@@ -88,7 +94,7 @@ def main():
                 train_loss_value = train_loss.item()
                 wandb.log({"train/loss": train_loss_value, "step_number": step_number})
             
-            if step_number % SNAPSHOT_SPACING == 0:
+            if save_snapshots and step_number % SNAPSHOT_SPACING == 0:
                 # parameters_to_vector takes a copy, then we detach it from the autograd graph, then move it to the CPU
                 training_snapshot_vectors.append(torch.nn.utils.parameters_to_vector(model.parameters()).detach().cpu())
         
@@ -102,9 +108,18 @@ def main():
             save_checkpoint(model, run_id)
 
         # Write out snapshots
-        save_training_snapshots(run_id, training_snapshot_vectors)
+        if save_snapshots:
+            save_training_snapshots(run_id, training_snapshot_vectors)
 
         print(f"completed epoch {epoch}")
+
+    # A sweep agent finishes its own runs, so only finish runs we created.
+    if owns_run:
+        wandb.finish()
+    return run_id
+
+def main():
+    train(load_default_config())
 
 def save_training_snapshots(run_id: str, training_snapshot_vectors: list[torch.Tensor]) -> None:
     """
