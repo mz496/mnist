@@ -6,22 +6,23 @@ Animate a training run's path across the loss surface of a PCA plane of its trai
 
 ## The plane
 
-- The two axes are the top two PCA directions as unit direction vectors alpha, beta (or d1, d2) in weight-space of all training snapshots in the video's window.
-    - Note that this can be either the full run, or some prefix via max_steps.
-- The origin (0, 0) is the final snapshot of the window, so the path always ends there. The final frame is thus equal to the plot of the full path.
-- The plane and range (min/max x/y) are fixed for every frame.
+- The two axes are the top two PCA directions as unit direction vectors d1, d2 in weight-space of all training snapshots in the video's window.
+    - Note that this can be either the full run, or some prefix via --max-step.
+- The origin (0, 0) is the final snapshot of the window, so the path always ends there.
+- The range (min/max x/y) is fixed for every frame based on the origin + range of the points.
 
 ## The points
 
-- These come from the grid_sweep file. Each point represents a training snapshot.
+- These come from the grid_sweep npz file. Each point represents a training snapshot.
 - A point's (u, v) coordinate is the snapshot minus the final snapshot, dotted with the two unit direction vectors, to plot it into the fixed plane.
+  - ((u, v) are called alpha, beta in the plots)
 - Loss values per-point are measured by running the snapshot's weights over the data, not read off the contour, as that is only correct for the current frame and point.
   - "Correct" is a bit lossy here since the grid resolution is low, but it would theoretically be correct.
-  - Also note that we need to measure loss on the same training subset the optimizer was descending.
+  - Also note that we need to measure loss from the training examples, since the optimizer optimizes training loss.
 
 ## The contour
 
-- In frame n, the grid point (u, v) contour value is the weights
+- In frame n, the grid point (u, v) contour value is the loss of the network with weights
 base_n + u * d1 + v * d2, where base_n = snapshot_n - u_n * d1 - v_n * d2:
 the plane parallel to the PCA plane that passes through snapshot n.
     
