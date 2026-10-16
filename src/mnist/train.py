@@ -15,7 +15,7 @@ from torch.nn import Module
 from datetime import datetime
 
 # Steps between training snapshots. Snapshot row i is training step (i + 1) * SNAPSHOT_SPACING,
-# which is how loss_landscape/compute_surface turns a step number into a row count.
+# which is how loss_landscape/grid_sweep turns a step number into a row count.
 SNAPSHOT_SPACING = 10
 
 def main():

@@ -18,6 +18,7 @@ from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 
 from mnist.loss_landscape.file_io_utils import format_tags, viz_filename, viz_plots_dir
+from mnist.loss_landscape.grid_sweep import create_or_load_grid_sweep
 from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str, sweep_tags
 
 
@@ -221,8 +222,12 @@ def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Draw a plot from an .npz saved by compute_surface")
-    parser.add_argument("npz", type=Path, help="path to a sweep saved by compute_surface, e.g. plots/abc123_2d.npz. The file's mode key says whether it is a 1d or a 2d sweep")
+    parser = argparse.ArgumentParser(description="Plot the loss landscape around a run's weights. The sweep is computed first if it isn't saved yet")
+    parser.add_argument("run_id", type=str, help="run id of a training run, i.e. the name of its folder under checkpoints/, e.g. 2026-10-14T19:28:51_45xyzktb")
+    parser.add_argument("--mode", choices=["1d", "2d"], default="1d", help="sweep along one direction or over a 2D grid")
+    parser.add_argument("--trajectory-plot", action="store_true", help="2d only: lay the grid out along the training snapshots' PCA directions, draw the training path on it, and center on the final training snapshot rather than the best validation checkpoint")
+    parser.add_argument("--max-step", type=int, default=None, help="with --trajectory-plot, use only the training snapshots up to this step (e.g. 600), centered on the last of them. Rounds down to a multiple of the snapshot spacing")
+    parser.add_argument("--seed", type=int, default=0, help="when in random direction mode, seed for the randomness (2d mode also uses seed + 1)")
     parser.add_argument("--style", choices=["contour", "surface"], default="contour", help="2D plots only")
     return parser.parse_args()
 
@@ -259,20 +264,19 @@ def draw_2d(npz: Path, data: np.lib.npyio.NpzFile, style: str, stamp: str) -> No
 
 def main() -> None:
     args = parse_args()
-    if not args.npz.is_file():
-        raise FileNotFoundError(f"sweep file not found: {args.npz}")
-    with np.load(args.npz) as data:
+    npz = create_or_load_grid_sweep(args.run_id, args.mode, trajectory=args.trajectory_plot, max_step=args.max_step, seed=args.seed)
+    with np.load(npz) as data:
         # Before anything else: the other keys can't be trusted from a file this reader doesn't understand
-        check_grid_sweep_schema_version(args.npz, data)
-        mode = read_str(args.npz, data, "mode")
+        check_grid_sweep_schema_version(npz, data)
+        mode = read_str(npz, data, "mode")
         # One timestamp for every image this run writes, so a re-plot never overwrites an earlier one
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         if mode == "1d":
-            draw_1d(args.npz, data, stamp)
+            draw_1d(npz, data, stamp)
         elif mode == "2d":
-            draw_2d(args.npz, data, args.style, stamp)
+            draw_2d(npz, data, args.style, stamp)
         else:
-            raise ValueError(f"unknown mode {mode!r} in {args.npz}, expected '1d' or '2d'")
+            raise ValueError(f"unknown mode {mode!r} in {npz}, expected '1d' or '2d'")
 
 
 if __name__ == "__main__":

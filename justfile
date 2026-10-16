@@ -7,11 +7,8 @@ train:
 test checkpoint:
     uv run python -m mnist.test "{{checkpoint}}"
 
-loss-landscape-compute run_id *flags:
-    uv run python -m mnist.loss_landscape.compute_surface "{{run_id}}" {{flags}}
+loss-landscape-plot run_id *flags:
+    uv run python -m mnist.loss_landscape.plot "{{run_id}}" {{flags}}
 
-loss-landscape-plot npz *flags:
-    uv run python -m mnist.loss_landscape.plot "{{npz}}" {{flags}}
-
-loss-landscape-animate npz *flags:
-    uv run python -m mnist.loss_landscape.animate "{{npz}}" {{flags}}
+loss-landscape-animate run_id *flags:
+    uv run python -m mnist.loss_landscape.animate "{{run_id}}" {{flags}}

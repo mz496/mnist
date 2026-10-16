@@ -41,6 +41,7 @@ from matplotlib.text import Text
 from matplotlib.transforms import offset_copy
 
 from mnist.loss_landscape.file_io_utils import format_tags, viz_animations_dir, viz_filename
+from mnist.loss_landscape.grid_sweep import create_or_load_grid_sweep
 from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str, sweep_tags
 from mnist.loss_landscape.snapshot_metrics_file_manager import SnapshotMetrics, create_or_load_snapshot_metrics
 from mnist.loss_landscape.snapshot_surfaces_file_manager import DIRECTION_TOLERANCE, SnapshotSurfaces, create_or_load_snapshot_surfaces
@@ -147,7 +148,7 @@ def load_sweep(npz: Path) -> Sweep:
         if mode != "2d":
             raise ValueError(f"{npz} is a {mode} sweep. An animation needs a 2d sweep.")
         if "trajectory" not in data.files:
-            raise ValueError(f"{npz} has no 'trajectory' key. Run compute_surface with --mode 2d --trajectory-plot to make one.")
+            raise ValueError(f"{npz} has no 'trajectory' key. Delete it and re-run to make one with --trajectory-plot.")
         return Sweep(
             alphas=data["alphas"],
             betas=data["betas"],
@@ -516,7 +517,8 @@ def run_preview(scene: Scene, counts: list[int], out_dir: Path, tags: str, stamp
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Animate the training path on the loss surface of a full-run trajectory sweep, as an MP4")
-    parser.add_argument("npz", type=Path, help="path to a 2d sweep of a full run, saved by compute_surface with --trajectory-plot")
+    parser.add_argument("run_id", type=str, help="run id of a training run, i.e. the name of its folder under checkpoints/, e.g. 2026-10-14T19:28:51_45xyzktb")
+    parser.add_argument("--max-step", type=int, default=None, help="use only the training snapshots up to this step (e.g. 600), as plot's --max-step does. Default is the whole run")
     parser.add_argument("--value", choices=["loss", "acc"], default="loss", help="which metric this animation tracks")
     parser.add_argument("--snapshots-per-frame", type=int, default=5, help="how many snapshots progress per frame of video")
     parser.add_argument("--fps", type=int, default=20, help="output video fps")
@@ -526,14 +528,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    sweep = load_sweep(args.npz)
+    # The 2d trajectory sweep is computed first if it isn't saved yet, which takes a while
+    npz = create_or_load_grid_sweep(args.run_id, "2d", trajectory=True, max_step=args.max_step)
+    sweep = load_sweep(npz)
     counts = frame_counts(len(sweep.trajectory), args.snapshots_per_frame)
     metrics = create_or_load_snapshot_metrics(sweep.run_id, sweep.split, len(sweep.trajectory))
     surfaces = create_or_load_snapshot_surfaces(sweep.run_id, sweep.split, sweep.trajectory, sweep.alphas, sweep.betas, counts)
     scene = build_scene(sweep, args.value, metrics, surfaces, counts)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = viz_animations_dir(sweep.run_id)
-    tags = f"{sweep_tags(args.npz)}_{format_tags(value=args.value, snapshots_per_frame=args.snapshots_per_frame)}"
+    tags = f"{sweep_tags(npz)}_{format_tags(value=args.value, snapshots_per_frame=args.snapshots_per_frame)}"
 
     if args.preview:
         sys.exit(0 if run_preview(scene, counts, out_dir, tags, stamp) else 1)

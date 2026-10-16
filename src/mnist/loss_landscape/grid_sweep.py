@@ -1,6 +1,6 @@
 
-import argparse
 import copy
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -16,39 +16,50 @@ from mnist.loss_landscape.grid_sweep_file_manager import grid_sweep_path, save_g
 from mnist.utils import get_device
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Sweep a run's best checkpoint's weights along random directions, evaluate the validation loss and accuracy at each point, and save the results to an .npz next to the run's checkpoint"
-    )
-    parser.add_argument("run_id", type=str, help="run id of a training run, i.e. the name of its folder under checkpoints/, e.g. 2026-10-14T19:28:51_45xyzktb (loads checkpoints/<run_id>/best_validation_loss.pt)")
-    parser.add_argument("--trajectory-plot", action="store_true", help="turn on non-random directions mode to plot trajectories (uses the training snapshots' PCA directions for this run id instead, and centers on the final training snapshot rather than the best validation checkpoint)")
-    parser.add_argument("--max-step", type=int, default=None, help="with --trajectory-plot, use only the training snapshots up to this step (e.g. 600), centered on the last of them. Rounds down to a multiple of the snapshot spacing")
-    parser.add_argument("--seed", type=int, default=0, help="when in random direction mode, seed for the randomness (2d mode also uses seed + 1)")
-    parser.add_argument("--mode", choices=["1d", "2d"], default="1d", help="sweep along one direction or over a 2D grid")
-    return parser.parse_args()
+def create_or_load_grid_sweep(run_id: str, mode: str, trajectory: bool = False, max_step: int | None = None, seed: int = 0) -> Path:
+    """
+    The path of the grid sweep for these params, computing and saving it first if it doesn't exist yet.
+    The sweep is saved next to the run's checkpoint (see grid_sweep_path). Delete the file to compute it again.
+    """
+    # Round max_step down first, as create_grid_sweep does, so the path looked for is the path it saves to
+    if max_step is not None:
+        max_step = max_step // SNAPSHOT_SPACING * SNAPSHOT_SPACING
+    path = grid_sweep_path(run_id, mode, trajectory=trajectory, max_step=max_step, seed=seed)
+    if path.is_file():
+        return path
+    return create_grid_sweep(run_id, mode, trajectory, max_step, seed)
 
-def main():
-    args = parse_args()
-    run_id: str = args.run_id
+
+def create_grid_sweep(run_id: str, mode: str, trajectory: bool = False, max_step: int | None = None, seed: int = 0) -> Path:
+    """
+    Sweep a run's weights over a line (mode "1d") or a grid (mode "2d"), evaluate the loss and accuracy at each point,
+    and save the results. With trajectory, the 2d grid is laid out along the PCA directions of the run's training
+    snapshots instead of random directions, and centered on the final snapshot rather than the best validation checkpoint.
+    max_step limits trajectory to the snapshots up to that step, rounded down to a multiple of the snapshot spacing.
+    The seed picks the random directions, and does nothing for a trajectory.
+    Returns the path it saved to.
+    """
+    if mode not in ("1d", "2d"):
+        raise ValueError(f"mode must be '1d' or '2d', got {mode!r}")
+    if trajectory and mode == "1d":
+        raise ValueError("trajectory plot not supported for 1D")
+    if max_step is not None and not trajectory:
+        raise ValueError("max_step only applies with trajectory")
     device = get_device()
     print("MOVING MODEL TO DEVICE:", device)
-    if args.trajectory_plot and args.mode == "1d":
-        raise Exception("trajectory plot not supported for 1D")
-    if args.max_step is not None and not args.trajectory_plot:
-        raise Exception("--max-step only applies with --trajectory-plot")
 
     # The last training step of the window of snapshots used, only set with --max-step. It can be below --max-step if
     # that wasn't a multiple of the snapshot spacing.
     window_last_step: int | None = None
 
-    if args.trajectory_plot:
+    if trajectory:
         # [n, D] where n is the number of snapshots
         snapshots = load_training_snapshots(run_id)
-        if args.max_step is not None:
+        if max_step is not None:
             # Snapshot row i is training step (i + 1) * SNAPSHOT_SPACING, so the steps up to max_step are the first rows
-            n_keep = args.max_step // SNAPSHOT_SPACING
+            n_keep = max_step // SNAPSHOT_SPACING
             if not 3 <= n_keep <= len(snapshots):
-                raise ValueError(f"--max-step {args.max_step} keeps {n_keep} snapshots, but it needs between 3 and {len(snapshots)}")
+                raise ValueError(f"--max-step {max_step} keeps {n_keep} snapshots, but it needs between 3 and {len(snapshots)}")
             snapshots = snapshots[:n_keep]
             window_last_step = n_keep * SNAPSHOT_SPACING
         # Theta star is the final training snapshot (of the window, if --max-step is set), not the best validation checkpoint
@@ -67,11 +78,11 @@ def main():
     config = load_default_config()
     data = get_dataloaders(config.data)
 
-    if args.mode == "1d":
+    if mode == "1d":
         # Get a random direction in weight-space of the model
         # This will be our axis for plotting
-        print("DIRECTION SEED:", args.seed)
-        d1 = create_random_direction(model, args.seed)
+        print("DIRECTION SEED:", seed)
+        d1 = create_random_direction(model, seed)
 
         # Evaluate as if weights were shifted
         x_min = -1
@@ -92,20 +103,21 @@ def main():
                 accs.append(acc)
 
         # Save the raw numbers
-        out_path = grid_sweep_path(run_id, args.mode, seed=args.seed)
+        out_path = grid_sweep_path(run_id, mode, seed=seed)
         save_grid_sweep(
             out_path,
             alphas=alphas,
             loss=np.array(losses),
             acc=np.array(accs),
-            seed=np.array(args.seed),
+            seed=np.array(seed),
             run_id=np.array(run_id),
             split=np.array("validation"),  # which data the loss and accuracy were measured on
-            mode=np.array(args.mode),  # "1d": the plot reads this to know what kind of sweep the file is
+            mode=np.array(mode),  # "1d": the plot reads this to know what kind of sweep the file is
         )
         print("Saved 1D sweep to", out_path)
+        return out_path
 
-    elif args.mode == "2d":
+    elif mode == "2d":
         # Extra arrays for the npz that only exist in trajectory mode: the training path and the PCA explained variance.
         # The plot reads these keys if they're present.
         # Typed as Any because numpy's savez stubs would otherwise read a **dict[str, ndarray] as possibly meant for its allow_pickle keyword
@@ -113,10 +125,10 @@ def main():
 
         # In trajectory mode, measure the loss on a fixed training subset: it's the loss the optimizer was descending.
         # Otherwise use the validation set.
-        split = "train" if args.trajectory_plot else "validation"
-        eval_loader = data.train_subset if args.trajectory_plot else data.validation
+        split = "train" if trajectory else "validation"
+        eval_loader = data.train_subset if trajectory else data.validation
 
-        if args.trajectory_plot:
+        if trajectory:
             # Use training snapshots as the plotting plane and to plot the trajectory on that plane
 
             # PCA on training snapshots; extract top 2
@@ -151,9 +163,9 @@ def main():
         else:
             # Get two random directions in weight-space of the model
             # These will be our axes for plotting
-            print("DIRECTION SEEDS:", args.seed, args.seed + 1)
-            d1 = create_random_direction(model, args.seed)
-            d2 = create_random_direction(model, args.seed + 1)
+            print("DIRECTION SEEDS:", seed, seed + 1)
+            d1 = create_random_direction(model, seed)
+            d2 = create_random_direction(model, seed + 1)
 
             # In a grid from [-x,+x]*[-y,+y] eval as if the weights were shifted to that space
             x_min = -1
@@ -177,20 +189,19 @@ def main():
             print(f"2D sweep: finished row {j + 1}/{len(betas)} (beta = {beta:.2f})")
 
         # Save the raw numbers
-        out_path = grid_sweep_path(run_id, args.mode, trajectory=args.trajectory_plot, max_step=window_last_step, seed=args.seed)
+        out_path = grid_sweep_path(run_id, mode, trajectory=trajectory, max_step=window_last_step, seed=seed)
         save_grid_sweep(
             out_path,
             alphas=alphas,
             betas=betas,
             loss=loss_grid,
             acc=acc_grid,
-            seed=np.array(args.seed),
+            seed=np.array(seed),
             run_id=np.array(run_id),
             split=np.array(split),  # which data the loss and accuracy were measured on
-            mode=np.array(args.mode),  # "2d": the plot reads this to know what kind of sweep the file is
+            mode=np.array(mode),  # "2d": the plot reads this to know what kind of sweep the file is
             **extra,
         )
         print("Saved 2D sweep to", out_path)
-
-if __name__ == "__main__":
-    main()
+        return out_path
+    raise AssertionError(mode)

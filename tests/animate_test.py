@@ -34,7 +34,7 @@ import torch
 
 
 def write_sweep(path: Path, mode: str = "2d", with_trajectory: bool = True, n_points: int = 40) -> Path:
-    """A small 2d trajectory sweep file with the keys compute_surface writes: a smooth bowl, and a path that ends at the origin."""
+    """A small 2d trajectory sweep file with the keys grid_sweep writes: a smooth bowl, and a path that ends at the origin."""
     alphas = np.linspace(-6.0, 1.0, 9)
     betas = np.linspace(-2.0, 3.0, 7)
     alpha_grid, beta_grid = np.meshgrid(alphas, betas)  # [len(betas), len(alphas)]
