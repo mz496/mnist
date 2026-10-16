@@ -2,6 +2,7 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -149,16 +150,16 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def draw_1d(npz: Path, data: np.lib.npyio.NpzFile) -> None:
+def draw_1d(npz: Path, data: np.lib.npyio.NpzFile, stamp: str) -> None:
     alphas, losses, accs = data["alphas"], data["loss"], data["acc"]
     run_id = read_str(npz, data, "run_id")
     split = read_str(npz, data, "split")
-    out_path = npz.with_suffix(".png")
+    out_path = npz.with_name(f"{npz.stem}_{stamp}.png")
     plot_1d(alphas, losses, accs, out_path, run_id=run_id, split=split)
     print("Saved 1D plot to", out_path)
 
 
-def draw_2d(npz: Path, data: np.lib.npyio.NpzFile, style: str) -> None:
+def draw_2d(npz: Path, data: np.lib.npyio.NpzFile, style: str, stamp: str) -> None:
     alphas, betas, losses, accs = data["alphas"], data["betas"], data["loss"], data["acc"]
     # Only present for sweeps run with --trajectory-plot
     trajectory = data["trajectory"] if "trajectory" in data.files else None
@@ -168,7 +169,7 @@ def draw_2d(npz: Path, data: np.lib.npyio.NpzFile, style: str) -> None:
     # The loss at each path point, read off the saved loss grid at that point's position. Not recomputed per snapshot.
     trajectory_loss = sample_grid(alphas, betas, losses, trajectory) if trajectory is not None else None
     for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
-        out_path = npz.with_name(f"{npz.stem}_{name}_{style}.png")
+        out_path = npz.with_name(f"{npz.stem}_{name}_{style}_{stamp}.png")
         title = f"{split_label(split)} {'loss' if name == 'loss' else 'accuracy'}"
         if style == "contour":
             plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance, trajectory_loss=trajectory_loss, trajectory_loss_label=f"{split_label(split)} loss at path point (from the grid)")
@@ -185,10 +186,12 @@ def main() -> None:
         # Before anything else: the other keys can't be trusted from a file this reader doesn't understand
         check_schema_version(args.npz, data)
         mode = read_str(args.npz, data, "mode")
+        # One timestamp for every image this run writes, so a re-plot never overwrites an earlier one
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         if mode == "1d":
-            draw_1d(args.npz, data)
+            draw_1d(args.npz, data, stamp)
         elif mode == "2d":
-            draw_2d(args.npz, data, args.style)
+            draw_2d(args.npz, data, args.style, stamp)
         else:
             raise ValueError(f"unknown mode {mode!r} in {args.npz}, expected '1d' or '2d'")
 
