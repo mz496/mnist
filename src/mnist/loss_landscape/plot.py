@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 
-from mnist.loss_landscape.compute_surface import SCHEMA_VERSION
+from mnist.loss_landscape.file_io_utils import check_schema_version, read_str
 
 
 def split_label(split: str) -> str:
@@ -147,34 +147,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("npz", type=Path, help="path to a sweep saved by compute_surface, e.g. plots/abc123_2d.npz. The file's mode key says whether it is a 1d or a 2d sweep")
     parser.add_argument("--style", choices=["contour", "surface"], default="contour", help="2D plots only")
     return parser.parse_args()
-
-
-def major_version(version: str) -> int:
-    """The major part of a "major.minor" version string like "0.1"."""
-    return int(version.split(".")[0])
-
-
-def check_schema_version(npz: Path, data: np.lib.npyio.NpzFile) -> None:
-    """
-    Refuse a file that doesn't record its schema version, or whose major version is behind this reader's.
-    A newer minor version is fine, since a minor bump only adds keys.
-    """
-    if "schema_version" not in data.files:
-        raise ValueError(f"{npz} has no 'schema_version' key. Regenerate it with the current compute_surface, which writes schema {SCHEMA_VERSION}.")
-    file_version = str(data["schema_version"])
-    try:
-        file_major = major_version(file_version)
-    except ValueError:
-        raise ValueError(f"{npz} has an unreadable schema_version {file_version!r}, expected something like {SCHEMA_VERSION!r}.") from None
-    if file_major < major_version(SCHEMA_VERSION):
-        raise ValueError(f"{npz} is schema {file_version}, behind this reader's schema {SCHEMA_VERSION} on the major version. Regenerate it with the current compute_surface.")
-
-
-def read_str(npz: Path, data: np.lib.npyio.NpzFile, key: str) -> str:
-    """A string key that compute_surface always records. Fails loudly if it's missing."""
-    if key not in data.files:
-        raise ValueError(f"{npz} has no '{key}' key, which compute_surface always records. The file is damaged or was not written by compute_surface.")
-    return str(data[key])
 
 
 def draw_1d(npz: Path, data: np.lib.npyio.NpzFile) -> None:

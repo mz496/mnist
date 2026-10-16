@@ -13,13 +13,8 @@ from mnist.evaluate import evaluate
 from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots, project_snapshots_onto_pca_directions
 from mnist.model import LeNet5
 from mnist.train import load_checkpoint, load_training_snapshots
+from mnist.loss_landscape.file_io_utils import SCHEMA_VERSION
 from mnist.utils import get_device
-
-# Version of the .npz layout this script writes. plot.py imports it and refuses files that are behind on the major version.
-# Bump the minor version when a key is added. Bump the major version when a key is removed, renamed, or changes meaning.
-# Version 0.1 keys, for both modes: alphas, loss, acc, seed, run_id, split, mode, schema_version.
-# 2d adds betas. 2d with --trajectory-plot adds trajectory and explained_variance.
-SCHEMA_VERSION = "0.1"
 
 
 def parse_args() -> argparse.Namespace:
