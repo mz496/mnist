@@ -36,7 +36,7 @@ def validate_axes(axes: dict[str, list[Any]]) -> None:
             with_overrides(base, {key: value})
 
 
-def to_sweep_config(axes: dict[str, list[Any]]) -> dict[str, Any]:
+def to_sweep_config(axes: dict[str, list[Any]], name: str | None = None) -> dict[str, Any]:
     """
     Builds a W&B grid sweep config. Dotted keys become nested parameters so that wandb.config
     mirrors our Config: {"train.seed": [1, 2]} -> parameters: {train: {parameters: {seed: {values: [1, 2]}}}}
@@ -46,7 +46,7 @@ def to_sweep_config(axes: dict[str, list[Any]]) -> dict[str, Any]:
         section, _, key = dotted.partition(".")
         parameters.setdefault(section, {"parameters": {}})["parameters"][key] = {"values": values}
     return {
-        "name": f"hyperparameter-sweep-{timestamp()}",
+        "name": f"sweep_{timestamp()}" + (f"_{name}" if name else ""),
         "method": "grid",
         "metric": {"name": "validation/loss", "goal": "minimize"},
         "parameters": parameters,
@@ -89,9 +89,9 @@ def run_trial() -> None:
     train(config, run=run, save_snapshots=False)
 
 
-def create_sweep(axes: dict[str, list[Any]]) -> str:
+def create_sweep(axes: dict[str, list[Any]], name: str | None = None) -> str:
     validate_axes(axes)
-    sweep_config = to_sweep_config(axes)
+    sweep_config = to_sweep_config(axes, name)
     sweep_id = wandb.sweep(sweep_config, project=PROJECT)
     print(f"created sweep {sweep_config['name']} ({sweep_id})")
     return sweep_id
@@ -124,10 +124,11 @@ def run_agents(sweep_id: str, workers: int, count: int | None) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Hyperparameter sweep (Cartesian grid) via a W&B sweep.")
     parser.add_argument("axes", nargs="+", help="key=v1,v2,... e.g. train.seed=1,2,3")
+    parser.add_argument("--name", default=None, help="appended to the sweep name")
     parser.add_argument("--workers", type=int, default=1, help="parallel agent processes")
     parser.add_argument("--count", type=int, default=None, help="max runs per agent")
     args = parser.parse_args()
-    run_agents(create_sweep(parse_axes(args.axes)), args.workers, args.count)
+    run_agents(create_sweep(parse_axes(args.axes), args.name), args.workers, args.count)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,13 @@ def test_to_sweep_config_nests_parameters():
     }
 
 
+def test_to_sweep_config_appends_name():
+    named = to_sweep_config({"train.seed": [1]}, name="seed-check")
+    assert named["name"].startswith("sweep_")
+    assert named["name"].endswith("_seed-check")
+    assert not to_sweep_config({"train.seed": [1]})["name"].endswith("_seed-check")
+
+
 def test_flatten_round_trips_nested_sweep_values():
     assert flatten({"train": {"learning_rate": 0.01, "seed": 2}}) == {
         "train.learning_rate": 0.01,
