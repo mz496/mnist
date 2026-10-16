@@ -77,6 +77,24 @@ def sample_grid(alphas: np.ndarray, betas: np.ndarray, grid: np.ndarray, points:
     )
 
 
+def round_log_ticks(low: float, high: float) -> list[float]:
+    """
+    Tick values for a log-scaled axis over [low, high]. A log axis would label only the powers of ten, so name the round
+    values (1, 2 and 5 times a power of ten) inside the range instead. When the range is too narrow to hold two of them,
+    for a loss that barely moves, spread four ticks evenly in log space so the axis is never left without numbers.
+    """
+    round_values = [m * 10.0**e for e in range(-6, 3) for m in (1, 2, 5)]
+    ticks = [t for t in round_values if low <= t <= high]
+    if len(ticks) < 2:
+        ticks = [float(t) for t in np.geomspace(low, high, 4)]
+    return ticks
+
+
+def format_tick(value: float) -> str:
+    """A tick label with four significant digits at most, so 2.2144 stays readable and 0.1 stays 0.1."""
+    return f"{value:.4g}"
+
+
 def contour_levels(values: np.ndarray, log_levels: bool, log_error_levels: bool, n_levels: int, equal_color_steps: bool = False) -> tuple[np.ndarray | int, BoundaryNorm | None, bool]:
     """
     The contour levels for a grid, the color norm to go with them, and whether the grid is flat.
@@ -163,10 +181,9 @@ def draw_trajectory_overlay(fig: Figure, ax: Axes, trajectory: np.ndarray, traje
         # Horizontal, under the plot, so it doesn't squeeze the axes next to the other colorbar
         dots_colorbar = fig.colorbar(path, ax=ax, label=trajectory_loss_label, orientation="horizontal", location="bottom", pad=colorbar_pad, shrink=0.8)
         if log_dot_colors:
-            # A log axis would label only the powers of ten. Name a few round values inside the range instead.
-            ticks = [t for t in (0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0) if float(trajectory_loss.min()) <= t <= float(trajectory_loss.max())]
+            ticks = round_log_ticks(float(trajectory_loss.min()), float(trajectory_loss.max()))
             dots_colorbar.set_ticks(ticks)
-            dots_colorbar.set_ticklabels([f"{t:g}" for t in ticks])
+            dots_colorbar.set_ticklabels([format_tick(t) for t in ticks])
             dots_colorbar.ax.minorticks_off()
     start = ax.plot(trajectory[0, 0], trajectory[0, 1], marker="o", color="lime", markeredgecolor="k", markersize=9, zorder=5, label="start")[0]
     end = ax.plot(trajectory[-1, 0], trajectory[-1, 1], marker="s", color="cyan", markeredgecolor="k", markersize=8, zorder=5, label="end")[0]
@@ -229,10 +246,9 @@ def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
     ax.set_ylabel(y_label)
     ax.set_zlabel(title)
     if log_z:
-        # Name round values inside the range, as the dots' colorbar in the contour plots does
-        ticks = [t for t in (0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0) if float(values.min()) <= t <= float(values.max())]
+        ticks = round_log_ticks(float(values.min()), float(values.max()))
         ax.set_zticks([np.log10(t) for t in ticks])
-        ax.set_zticklabels([f"{t:g}" for t in ticks])
+        ax.set_zticklabels([format_tick(t) for t in ticks])
 
     if trajectory is not None:
         if trajectory_values is None:
