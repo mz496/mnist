@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from mnist.loss_landscape import grid_sweep
+from mnist.loss_landscape.plot import grid_sweep
 from mnist.train import SNAPSHOT_SPACING
 
 

@@ -12,7 +12,7 @@ from mnist.evaluate import evaluate
 from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots, project_snapshots_onto_pca_directions, unflatten_like
 from mnist.model import LeNet5
 from mnist.train import SNAPSHOT_SPACING, load_checkpoint, load_training_snapshots
-from mnist.loss_landscape.grid_sweep_file_manager import grid_sweep_path, save_grid_sweep
+from mnist.loss_landscape.plot.grid_sweep_file_manager import grid_sweep_path, save_grid_sweep
 from mnist.utils import get_device
 
 

@@ -41,11 +41,11 @@ from matplotlib.text import Text
 from matplotlib.transforms import offset_copy
 
 from mnist.loss_landscape.file_io_utils import format_tags, viz_animations_dir, viz_filename
-from mnist.loss_landscape.grid_sweep import create_or_load_grid_sweep
-from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str, sweep_tags
-from mnist.loss_landscape.snapshot_metrics_file_manager import SnapshotMetrics, create_or_load_snapshot_metrics
-from mnist.loss_landscape.snapshot_surfaces_file_manager import DIRECTION_TOLERANCE, SnapshotSurfaces, create_or_load_snapshot_surfaces
-from mnist.loss_landscape.plot import (
+from mnist.loss_landscape.plot.grid_sweep import create_or_load_grid_sweep
+from mnist.loss_landscape.plot.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str, sweep_tags
+from mnist.loss_landscape.animate.snapshot_metrics_file_manager import SnapshotMetrics, create_or_load_snapshot_metrics
+from mnist.loss_landscape.animate.snapshot_surfaces_file_manager import DIRECTION_TOLERANCE, SnapshotSurfaces, create_or_load_snapshot_surfaces
+from mnist.loss_landscape.plot.plot import (
     TrajectoryArtists,
     contour_levels,
     draw_contour_background,

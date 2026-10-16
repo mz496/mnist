@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from mnist.loss_landscape.file_io_utils import format_tags, viz_animations_dir, viz_filename, viz_plots_dir
-from mnist.loss_landscape.grid_sweep_file_manager import GRID_SWEEP_SCHEMA_VERSION, check_grid_sweep_schema_version, grid_sweep_path, save_grid_sweep, sweep_tags
+from mnist.loss_landscape.plot.grid_sweep_file_manager import GRID_SWEEP_SCHEMA_VERSION, check_grid_sweep_schema_version, grid_sweep_path, save_grid_sweep, sweep_tags
 
 
 def test_format_tags_names_match_cli_flags_and_skip_unset_params() -> None:

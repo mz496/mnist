@@ -18,8 +18,8 @@ from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 
 from mnist.loss_landscape.file_io_utils import format_tags, viz_filename, viz_plots_dir
-from mnist.loss_landscape.grid_sweep import create_or_load_grid_sweep
-from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str, sweep_tags
+from mnist.loss_landscape.plot.grid_sweep import create_or_load_grid_sweep
+from mnist.loss_landscape.plot.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str, sweep_tags
 
 
 def run_label(run_id: str, max_step: int | None) -> str:
