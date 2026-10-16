@@ -198,20 +198,54 @@ def plot_2d_contour(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, o
     plt.close(fig)
 
 
-def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, run_id: str | None = None, max_step: int | None = None) -> None:
+def plot_2d_surface(alphas: np.ndarray, betas: np.ndarray, values: np.ndarray, out_path: Path, title: str, run_id: str | None = None, max_step: int | None = None, log_z: bool = False, trajectory: np.ndarray | None = None, trajectory_values: np.ndarray | None = None, explained_variance: np.ndarray | None = None) -> None:
     """
-    3D surface plot of a [len(betas), len(alphas)] grid.
+    3D surface plot of a [len(betas), len(alphas)] grid, colored with the same equal-step levels as the contour plots.
     run_id: shown in the title, if given.
     max_step: the last training step of the window the sweep used, shown in the title next to the run id.
+    log_z: height is the log of the value, so a loss that spans orders of magnitude doesn't flatten its basin. The z axis
+        is still labeled in the value's own units.
+    trajectory: optional [n, 2] training path, drawn on the surface as a line with start and end markers.
+    trajectory_values: [n] value at each path point, which sets the path's height. Required with trajectory.
+    explained_variance: optional [2] fraction of the snapshots' variance along PC1 and PC2, shown in the axis labels.
+    The star for the trained weights, at alpha = beta = 0, is drawn when there is a trajectory.
     """
     alpha_mesh, beta_mesh = np.meshgrid(alphas, betas)
+    height = np.log10(values) if log_z else values
 
-    fig = plt.figure(figsize=(8, 6))
+    # The same levels and colors as plot_2d_contour, so a color means the same value in both
+    levels, norm, _ = contour_levels(values, log_levels=log_z, log_error_levels=not log_z, n_levels=20, equal_color_steps=True)
+    colormap = plt.get_cmap("viridis")
+    face_colors = colormap(norm(values) / 255.0 if norm is not None else (values - values.min()) / max(float(values.max() - values.min()), 1e-12))
+
+    fig = plt.figure(figsize=(9, 7))
     ax = fig.add_subplot(projection="3d")
-    ax.plot_surface(alpha_mesh, beta_mesh, values, cmap="viridis")
-    ax.set_xlabel("alpha (d1)")
-    ax.set_ylabel("beta (d2)")
+    ax.plot_surface(alpha_mesh, beta_mesh, height, facecolors=face_colors, shade=False, linewidth=0, antialiased=False)
+    x_label, y_label = "alpha (d1)", "beta (d2)"
+    if explained_variance is not None:
+        x_label = f"alpha (PC1, {float(explained_variance[0]):.1%} of variance)"
+        y_label = f"beta (PC2, {float(explained_variance[1]):.1%} of variance)"
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
     ax.set_zlabel(title)
+    if log_z:
+        # Name round values inside the range, as the dots' colorbar in the contour plots does
+        ticks = [t for t in (0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0) if float(values.min()) <= t <= float(values.max())]
+        ax.set_zticks([np.log10(t) for t in ticks])
+        ax.set_zticklabels([f"{t:g}" for t in ticks])
+
+    if trajectory is not None:
+        if trajectory_values is None:
+            raise ValueError("trajectory_values is required with a trajectory")
+        path_height = np.log10(trajectory_values) if log_z else trajectory_values
+        # A little above the surface, and a high zorder because matplotlib draws a 3D surface over plain lines otherwise
+        lift = 0.02 * float(height.max() - height.min())
+        ax.plot(trajectory[:, 0], trajectory[:, 1], path_height + lift, color="red", linewidth=1.5, label="training path", zorder=10)
+        ax.plot(trajectory[:1, 0], trajectory[:1, 1], path_height[:1] + lift, linestyle="none", marker="o", color="lime", markeredgecolor="k", markersize=9, label="start", zorder=10)
+        ax.plot(trajectory[-1:, 0], trajectory[-1:, 1], path_height[-1:] + lift, linestyle="none", marker="s", color="cyan", markeredgecolor="k", markersize=8, label="end", zorder=10)
+        star_height = float(sample_grid(alphas, betas, height, np.zeros((1, 2)))[0]) + lift
+        ax.plot([0.0], [0.0], [star_height], linestyle="none", marker="*", color="white", markeredgecolor="k", markersize=14, label="final weights", zorder=10)
+        ax.legend(loc="upper left")
     if run_id is not None:
         ax.set_title(f"{title}\n{run_label(run_id, max_step)}")
 
@@ -258,7 +292,8 @@ def draw_2d(npz: Path, data: np.lib.npyio.NpzFile, style: str, stamp: str) -> No
         if style == "contour":
             plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance, trajectory_loss=trajectory_loss, trajectory_loss_label=f"{split_label(split)} loss at path point (from the grid)", max_step=max_step)
         else:
-            plot_2d_surface(alphas, betas, values, out_path, title, run_id=run_id, max_step=max_step)
+            # The path's height is the loss read off the grid, as for the contour's dots. Only the loss plot has a loss to read.
+            plot_2d_surface(alphas, betas, values, out_path, title, run_id=run_id, max_step=max_step, log_z=log_levels, trajectory=trajectory, trajectory_values=sample_grid(alphas, betas, values, trajectory) if trajectory is not None else None, explained_variance=explained_variance)
         print(f"Saved 2D {style} plot to", out_path)
 
 
