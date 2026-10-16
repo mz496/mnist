@@ -12,3 +12,6 @@ loss-landscape-compute run_id *flags:
 
 loss-landscape-plot npz *flags:
     uv run python -m mnist.loss_landscape.plot "{{npz}}" {{flags}}
+
+loss-landscape-animate npz *flags:
+    uv run python -m mnist.loss_landscape.animate "{{npz}}" {{flags}}

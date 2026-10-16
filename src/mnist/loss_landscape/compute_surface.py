@@ -182,6 +182,7 @@ def main():
                     loss_grid[j, i], acc_grid[j, i] = evaluate(model_shifted, eval_loader, device)
             print(f"2D sweep: finished row {j + 1}/{len(betas)} (beta = {beta:.2f})")
 
+        # TODO 10-16: Clean this up to keep the output file alongside the checkpoint. Also folders based on run_id instead of putting it in the path.
         # Save the raw numbers
         out_path = Path("plots") / f"{run_id}{window_tag}_2d.npz"
         out_path.parent.mkdir(parents=True, exist_ok=True)

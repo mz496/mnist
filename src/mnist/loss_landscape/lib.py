@@ -98,3 +98,19 @@ def unflatten_like(vector: np.ndarray, model: nn.Module) -> list[Tensor]:
     torch.nn.utils.vector_to_parameters(flat, scratch.parameters())
     # vector_to_parameters makes the parameters views into `flat`, so clone to hand back independent tensors
     return [p.detach().clone() for p in scratch.parameters()]
+
+
+def plane_base(snapshot: np.ndarray, point: np.ndarray, directions: np.ndarray) -> np.ndarray:
+    """
+    The base of the plane through a training snapshot that is parallel to the PCA plane and uses its (alpha, beta) coordinates.
+    base + alpha * d1 + beta * d2 is the snapshot itself at (alpha, beta) = point, the coordinates where the snapshot
+    projects onto the PCA plane. Everywhere else it is the PCA plane's own grid of (alpha, beta), shifted by the part of
+    the snapshot that lies off the plane, so the network at that snapshot sits exactly on this surface.
+
+    Inputs:
+    - snapshot: [D]
+    - point: [2], the snapshot's (alpha, beta) on the PCA plane
+    - directions: [2, D], the PCA directions
+    Output: [D]
+    """
+    return snapshot - point[0] * directions[0] - point[1] * directions[1]

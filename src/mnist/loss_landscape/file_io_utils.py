@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -47,3 +48,11 @@ def read_str(npz: Path, data: np.lib.npyio.NpzFile, key: str) -> str:
     if key not in data.files:
         raise ValueError(f"{npz} has no '{key}' key, which compute_surface always records. The file is damaged or was not written by compute_surface.")
     return str(data[key])
+
+
+def read_arrays(path: Path) -> dict[str, Any]:
+    """Every array in an .npz file by key, or an empty dict if the file doesn't exist yet."""
+    if not path.is_file():
+        return {}
+    with np.load(path) as file:
+        return {key: file[key] for key in file.files}
