@@ -3,9 +3,11 @@ from typing import Any
 
 import numpy as np
 
+from mnist.loss_landscape.file_io_utils import format_tags
+
 """
 Where a grid sweep from compute_surface lives, and how it is written and validated.
-A sweep is saved next to the run's checkpoint, as checkpoints/<run_id>/grid_sweep<tag>.npz.
+A sweep is saved next to the run's checkpoint, as checkpoints/<run_id>/grid_sweep_<tags>.npz.
 """
 
 
@@ -19,17 +21,14 @@ A sweep is saved next to the run's checkpoint, as checkpoints/<run_id>/grid_swee
 GRID_SWEEP_SCHEMA_VERSION = "0.2"
 
 
-def grid_sweep_path(run_id: str, mode: str, trajectory: bool = False, max_step: int | None = None) -> Path:
+def grid_sweep_path(run_id: str, mode: str, trajectory: bool = False, max_step: int | None = None, seed: int = 0) -> Path:
     """
-    Sweeps with different parameters get different files, so computing one never overwrites another:
-    grid_sweep_1d.npz, grid_sweep_2d.npz, grid_sweep_2d_trajectory.npz, grid_sweep_2d_trajectory_first600.npz
+    Sweeps with different parameters get different files, so computing one never overwrites another. The tags are named
+    like compute_surface's CLI flags: grid_sweep_mode=1d_seed=0.npz, grid_sweep_mode=2d_trajectory-plot=true_max-step=600.npz
+    The seed only picks the directions of a random sweep. A trajectory sweep uses the PCA directions, so its name has no seed.
     """
-    tag = f"_{mode}"
-    if trajectory:
-        tag += "_trajectory"
-    if max_step is not None:
-        tag += f"_first{max_step}"
-    return Path("checkpoints") / run_id / f"grid_sweep{tag}.npz"
+    tags = format_tags(mode=mode, trajectory_plot=trajectory, max_step=max_step, seed=None if trajectory else seed)
+    return Path("checkpoints") / run_id / f"grid_sweep_{tags}.npz"
 
 
 def save_grid_sweep(path: Path, **arrays: Any) -> None:

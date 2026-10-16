@@ -92,7 +92,7 @@ def main():
                 accs.append(acc)
 
         # Save the raw numbers
-        out_path = grid_sweep_path(run_id, args.mode)
+        out_path = grid_sweep_path(run_id, args.mode, seed=args.seed)
         save_grid_sweep(
             out_path,
             alphas=alphas,
@@ -177,7 +177,7 @@ def main():
             print(f"2D sweep: finished row {j + 1}/{len(betas)} (beta = {beta:.2f})")
 
         # Save the raw numbers
-        out_path = grid_sweep_path(run_id, args.mode, trajectory=args.trajectory_plot, max_step=window_last_step)
+        out_path = grid_sweep_path(run_id, args.mode, trajectory=args.trajectory_plot, max_step=window_last_step, seed=args.seed)
         save_grid_sweep(
             out_path,
             alphas=alphas,
