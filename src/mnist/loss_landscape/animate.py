@@ -38,9 +38,9 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.text import Text
 
-from mnist.loss_landscape.file_io_utils import check_schema_version, read_str
-from mnist.loss_landscape.snapshot_metrics import SnapshotMetrics, create_or_load_snapshot_metrics
-from mnist.loss_landscape.snapshot_surfaces import DIRECTION_TOLERANCE, SnapshotSurfaces, create_or_load_snapshot_surfaces
+from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str
+from mnist.loss_landscape.snapshot_metrics_file_manager import SnapshotMetrics, create_or_load_snapshot_metrics
+from mnist.loss_landscape.snapshot_surfaces_file_manager import DIRECTION_TOLERANCE, SnapshotSurfaces, create_or_load_snapshot_surfaces
 from mnist.loss_landscape.plot import (
     TrajectoryArtists,
     contour_levels,
@@ -109,7 +109,7 @@ def load_sweep(npz: Path) -> Sweep:
     if not npz.is_file():
         raise FileNotFoundError(f"sweep file not found: {npz}")
     with np.load(npz) as data:
-        check_schema_version(npz, data)
+        check_grid_sweep_schema_version(npz, data)
         mode = read_str(npz, data, "mode")
         if mode != "2d":
             raise ValueError(f"{npz} is a {mode} sweep. An animation needs a 2d sweep.")

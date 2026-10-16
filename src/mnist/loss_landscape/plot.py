@@ -17,7 +17,7 @@ from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 
-from mnist.loss_landscape.file_io_utils import check_schema_version, read_str
+from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str
 
 
 def run_label(run_id: str, max_step: int | None) -> str:
@@ -262,7 +262,7 @@ def main() -> None:
         raise FileNotFoundError(f"sweep file not found: {args.npz}")
     with np.load(args.npz) as data:
         # Before anything else: the other keys can't be trusted from a file this reader doesn't understand
-        check_schema_version(args.npz, data)
+        check_grid_sweep_schema_version(args.npz, data)
         mode = read_str(args.npz, data, "mode")
         # One timestamp for every image this run writes, so a re-plot never overwrites an earlier one
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")

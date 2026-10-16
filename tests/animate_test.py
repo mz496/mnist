@@ -22,12 +22,12 @@ from mnist.loss_landscape.animate import (
     set_frame,
 )
 from mnist.evaluate import evaluate
-from mnist.loss_landscape import snapshot_metrics, snapshot_surfaces
+from mnist.loss_landscape import snapshot_metrics_file_manager as snapshot_metrics, snapshot_surfaces_file_manager as snapshot_surfaces
 from mnist.loss_landscape.lib import get_pca_directions_for_snapshots, plane_base, project_snapshots_onto_pca_directions
 from mnist.loss_landscape.plot import sample_grid
-from mnist.loss_landscape.file_io_utils import SCHEMA_VERSION
-from mnist.loss_landscape.snapshot_metrics import SnapshotMetrics, create_or_load_snapshot_metrics
-from mnist.loss_landscape.snapshot_surfaces import SnapshotSurfaces, create_or_load_snapshot_surfaces
+from mnist.loss_landscape.grid_sweep_file_manager import SCHEMA_VERSION
+from mnist.loss_landscape.snapshot_metrics_file_manager import SnapshotMetrics, create_or_load_snapshot_metrics
+from mnist.loss_landscape.snapshot_surfaces_file_manager import SnapshotSurfaces, create_or_load_snapshot_surfaces
 from mnist.model import LeNet5
 from mnist.train import SNAPSHOT_SPACING
 import torch

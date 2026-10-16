@@ -1,7 +1,6 @@
 
 import argparse
 import copy
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -13,13 +12,13 @@ from mnist.evaluate import evaluate
 from mnist.loss_landscape.lib import create_random_direction, get_pca_directions_for_snapshots, project_snapshots_onto_pca_directions, unflatten_like
 from mnist.model import LeNet5
 from mnist.train import SNAPSHOT_SPACING, load_checkpoint, load_training_snapshots
-from mnist.loss_landscape.file_io_utils import SCHEMA_VERSION
+from mnist.loss_landscape.grid_sweep_file_manager import grid_sweep_path, save_grid_sweep
 from mnist.utils import get_device
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sweep a run's best checkpoint's weights along random directions, evaluate the validation loss and accuracy at each point, and save the results to an .npz in plots/"
+        description="Sweep a run's best checkpoint's weights along random directions, evaluate the validation loss and accuracy at each point, and save the results to an .npz next to the run's checkpoint"
     )
     parser.add_argument("run_id", type=str, help="run id of a training run, i.e. the name of its folder under checkpoints/, e.g. 2026-10-14T19:28:51_45xyzktb (loads checkpoints/<run_id>/best_validation_loss.pt)")
     parser.add_argument("--trajectory-plot", action="store_true", help="turn on non-random directions mode to plot trajectories (uses the training snapshots' PCA directions for this run id instead, and centers on the final training snapshot rather than the best validation checkpoint)")
@@ -93,9 +92,8 @@ def main():
                 accs.append(acc)
 
         # Save the raw numbers
-        out_path = Path("plots") / f"{run_id}_1d.npz"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(
+        out_path = grid_sweep_path(run_id, args.mode)
+        save_grid_sweep(
             out_path,
             alphas=alphas,
             loss=np.array(losses),
@@ -104,7 +102,6 @@ def main():
             run_id=np.array(run_id),
             split=np.array("validation"),  # which data the loss and accuracy were measured on
             mode=np.array(args.mode),  # "1d": the plot reads this to know what kind of sweep the file is
-            schema_version=np.array(SCHEMA_VERSION),
         )
         print("Saved 1D sweep to", out_path)
 
@@ -113,8 +110,6 @@ def main():
         # The plot reads these keys if they're present.
         # Typed as Any because numpy's savez stubs would otherwise read a **dict[str, ndarray] as possibly meant for its allow_pickle keyword
         extra: dict[str, Any] = {}
-        # Added to the output name when only a window of the training run is used, so it doesn't overwrite the full-run file
-        window_tag = ""
 
         # In trajectory mode, measure the loss on a fixed training subset: it's the loss the optimizer was descending.
         # Otherwise use the validation set.
@@ -141,7 +136,6 @@ def main():
             extra["explained_variance"] = explained_variance  # [2], fraction of the snapshots' variance along PC1, PC2
             if window_last_step is not None:
                 extra["max_step"] = np.array(window_last_step)
-                window_tag = f"_first{window_last_step}"
             # float() so the bounds are known to be floats (numpy's min/max results are partly unknown to the type checker)
             x_min, y_min = (float(v) for v in points.min(axis=0))
             x_max, y_max = (float(v) for v in points.max(axis=0))
@@ -182,11 +176,9 @@ def main():
                     loss_grid[j, i], acc_grid[j, i] = evaluate(model_shifted, eval_loader, device)
             print(f"2D sweep: finished row {j + 1}/{len(betas)} (beta = {beta:.2f})")
 
-        # TODO 10-16: Clean this up to keep the output file alongside the checkpoint. Also folders based on run_id instead of putting it in the path.
         # Save the raw numbers
-        out_path = Path("plots") / f"{run_id}{window_tag}_2d.npz"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(
+        out_path = grid_sweep_path(run_id, args.mode, trajectory=args.trajectory_plot, max_step=window_last_step)
+        save_grid_sweep(
             out_path,
             alphas=alphas,
             betas=betas,
@@ -196,7 +188,6 @@ def main():
             run_id=np.array(run_id),
             split=np.array(split),  # which data the loss and accuracy were measured on
             mode=np.array(args.mode),  # "2d": the plot reads this to know what kind of sweep the file is
-            schema_version=np.array(SCHEMA_VERSION),
             **extra,
         )
         print("Saved 2D sweep to", out_path)
