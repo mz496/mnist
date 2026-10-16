@@ -95,7 +95,7 @@ I got 1D plots working first, which roughly matches the graphs from earlier: val
 In 2D, this is roughly the same:
 - Take a trained network's many-dimensional weights $\theta^\star$; this is your (0, 0).
 - In some direction vectors $\overset{\rightharpoonup}{u}$, $\overset{\rightharpoonup}{v}$, both normalized relative to the weights, slide along those vectors (parametrized by, say, $\alpha$, $\beta$) and evaluate the network at points along those vectors: $L(\theta^\star + \alpha\overset{\rightharpoonup}{u} + \beta\overset{\rightharpoonup}{v})$.
-- Plot a contour where your x,y position is the $\alpha$, $\beta$ coordinate and color is the value (loss or validation).
+- Plot a contour where your x,y position is the $\alpha$, $\beta$ coordinate and color is the value (loss or accuracy).
 
 The 2D plots with the method of random directions around the best-validation-loss weights. Loss is a bit nicer in that the bands more clearly show the minimum, but probably could have used log-scale for both:
 
@@ -167,7 +167,7 @@ I decided to animate along the training path now to see whether I could find any
 
 Here I am freezing the axes and scales:
 
-![](img/2026-10-16-video_mode=2d_trajectory-plot=true_value=loss_snapshots-per-frame=5_fps=20.mp4)
+<video src="https://github.com/mz496/mnist/raw/main/img/2026-10-16-video_mode=2d_trajectory-plot=true_value=loss_snapshots-per-frame=5_fps=20.mp4" controls muted loop width="100%"></video>
 
 #### The initial plateau
 
@@ -184,4 +184,6 @@ Process:
 | ![](img/2026-10-16-train-loss-by-seed-unnormalized.png) | ![](img/2026-10-16-train-loss-by-seed-normalized.png) |
 
 - Could there have been alternate explanations? My stats is a little shaky here; I'm sure I could run a statsig check here, but this feels pretty decisive to me.
-- As for LeCun's reference to "zigzagging", that must just be in a different dimension than we are visualizing with the PCA. Maybe it would show up in a different plot.
+- As for LeCun's reference to "zigzagging", that must just be imprecise, or in a different dimension than we are visualizing with the PCA, i.e. excessive movement in these other dimensions means we are not progressing toward the goal in these two.
+
+
