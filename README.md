@@ -160,3 +160,22 @@ By first $N$ steps. Recall that most of the movement happens before step 600:
 | 100 | 300 | 600 | full |
 | --- | --- | --- | --- |
 | ![](img/2026-10-15-loss-contour-first-100.png) | ![](img/2026-10-15-loss-contour-first-300.png) | ![](img/2026-10-15-loss-contour-first-600.png) | ![](img/2026-10-15-loss-contour-all.png) |
+
+### Oct 16
+
+I decided to animate along the training path now to see whether I could find anything - I didn't, but at least I got pretty videos out.
+
+Here I am freezing the axes and scales:
+
+![](img/2026-10-16-video_mode=2d_trajectory-plot=true_value=loss_snapshots-per-frame=5_fps=20.mp4)
+
+Back to the original task of seeing what was responsible for the initial plateau. A few hypotheses that I skipped over (somewhat intentionally, as my goal here was not strictly to maximize accuracy or learn how to optimize hyperparameters, but rather build general understanding):
+
+- Randomness of the seed?
+- Bad initialization, not normalized to mean 0 and std 1?
+
+#### Sweep over seeds
+
+Seems to drop off around 100-300 when only varying the seed:
+
+![](img/2026-10-16-train-loss-by-seed.png)
