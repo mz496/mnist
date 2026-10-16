@@ -169,13 +169,19 @@ Here I am freezing the axes and scales:
 
 ![](img/2026-10-16-video_mode=2d_trajectory-plot=true_value=loss_snapshots-per-frame=5_fps=20.mp4)
 
-Back to the original task of seeing what was responsible for the initial plateau. A few hypotheses that I skipped over (somewhat intentionally, as my goal here was not strictly to maximize accuracy or learn how to optimize hyperparameters, but rather build general understanding):
+#### The initial plateau
 
-- Randomness of the seed?
-- Bad initialization, not normalized to mean 0 and std 1?
+I found decent empirical evidence for the hypothesis that the bad initialization was indeed a cause of the initial training plateau.
 
-#### Sweep over seeds
+images represented by [0,255] arrays -> [0,1] arrays -> not normalizing inputs, vs normalizing to mean 0, std 1) was indeed a cause of the plateau.
 
-Seems to drop off around 100-300 when only varying the seed:
+Process:
+- As a baseline, I did not normalize the data, swept across 8 seeds, and noted the training loss dropoff was around step 100-300.
+- Then I swept across those same 8 seeds while normalizing and noted a training loss dropoff was in a much tighter range around step 50-100.
 
-![](img/2026-10-16-train-loss-by-seed.png)
+| Un-normalized inputs | Normalized inputs |
+| --- | --- |
+| ![](img/2026-10-16-train-loss-by-seed-unnormalized.png) | ![](img/2026-10-16-train-loss-by-seed-normalized.png) |
+
+- Could there have been alternate explanations? My stats is a little shaky here; I'm sure I could run a statsig check here, but this feels pretty decisive to me.
+- As for LeCun's reference to "zigzagging", that must just be in a different dimension than we are visualizing with the PCA. Maybe it would show up in a different plot.
