@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from mnist.loss_landscape.animate.animate import Scene, build_scene, check_states, first_float, frame_counts, frame_label, load_sweep, read_frame_state, render_video, run_preview, set_frame
+from mnist.loss_landscape.animate.animate import Scene, build_scene, check_states, frame_counts, frame_label, load_sweep, read_frame_state, render_video, run_preview, set_frame
 from mnist.loss_landscape.animate.snapshot_metrics_file_manager import SnapshotMetrics
 from mnist.loss_landscape.animate.snapshot_surfaces_file_manager import SnapshotSurfaces
 from mnist.loss_landscape.plot.grid_sweep_file_manager import GRID_SWEEP_SCHEMA_VERSION
@@ -87,7 +87,6 @@ def test_frame_counts_end_on_the_whole_run():
 def test_set_frame_shows_the_first_n_points(scene: Scene):
     set_frame(scene, 20)
     assert np.array_equal(np.array(scene.artists.path.get_offsets()), scene.trajectory[:20])
-    assert (first_float(scene.highlight.get_xdata()), first_float(scene.highlight.get_ydata())) == (float(scene.trajectory[19, 0]), float(scene.trajectory[19, 1]))
     assert scene.label.get_text().splitlines()[0] == f"step {20 * SNAPSHOT_SPACING}"
     with pytest.raises(ValueError):
         set_frame(scene, 0)
@@ -225,7 +224,7 @@ def test_checks_catch_a_contour_that_does_not_read_the_measured_loss(scene: Scen
     broken = dataclasses.replace(scene, metrics=wrong)
     states = [read_frame_state(broken, n) for n in (10, 20, 40)]
     failed = [c.name for c in check_states(states, broken) if not c.ok]
-    assert "in every frame the contour at the highlighted point reads the network's measured loss" in failed
+    assert "in every frame the contour at the latest path point reads the network's measured loss" in failed
 
 
 def test_checks_catch_a_last_surface_that_is_not_the_sweeps_grid(scene: Scene):

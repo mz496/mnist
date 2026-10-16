@@ -5,8 +5,8 @@
 Animate a training run's path across the loss surface of its full-run PCA plane.
 
 Every frame uses the same plane and the same scales as the static full-run plot. The sweep file already holds every
-snapshot projected onto that plane, so frame f just draws the first f * snapshots_per_frame of those points and highlights the last
-one. The plane and the contour are never refit or recomputed, so nothing can drift between frames.
+snapshot projected onto that plane, so frame f just draws the first f * snapshots_per_frame of those points and shows the last
+one as the newest dot. The plane and the contour are never refit or recomputed, so nothing can drift between frames.
 
 The network itself is evaluated, in two ways. Each dot is colored by the loss of the network at that training step, and
 each frame prints the loss and accuracy of the network at its step. These are measured by running the snapshot's weights
@@ -36,7 +36,6 @@ from matplotlib.colors import BoundaryNorm
 from matplotlib.contour import QuadContourSet
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
-from matplotlib.lines import Line2D
 from matplotlib.text import Text
 from matplotlib.transforms import offset_copy
 
@@ -119,7 +118,6 @@ class Scene:
     ax: Axes
     filled: QuadContourSet
     artists: TrajectoryArtists
-    highlight: Line2D
     label: Text
     trajectory: np.ndarray  # [n, 2]
     trajectory_loss: np.ndarray  # [n], what the dots are shaded by: the network's measured loss
@@ -209,9 +207,7 @@ def build_scene(sweep: Sweep, value: str, metrics: SnapshotMetrics, surfaces: Sn
     ax.set_ylabel(ax.get_ylabel().replace(", weight-space", ",\nweight-space"))
     ax.set_title(f"{title}\n{run_label(sweep.run_id, sweep.max_step)}")
 
-    # The only things that move: a marker on the latest point and the step counter. The marker sits above the start and end
-    # markers, so it stays visible on the first frames, where the path hasn't left the start marker yet.
-    highlight = ax.plot([], [], linestyle="none", marker="o", markerfacecolor="black", markeredgecolor="white", markersize=7, zorder=5.5)[0]
+    # The only thing that moves besides the dots and the contour: the step counter.
     label = ax.text(0.0, 0.0, "", transform=below_plot, va="top", ha="left", fontsize=11)
 
     # Freeze the scales: the dots' color range comes from the whole path, and the axes stop autoscaling
@@ -225,7 +221,7 @@ def build_scene(sweep: Sweep, value: str, metrics: SnapshotMetrics, surfaces: Sn
     layout_figure(fig, ax, contour_colorbar, dots_colorbar)  # once. A layout pass per frame could shift the axes by a pixel
 
     scene = Scene(
-        fig=fig, ax=ax, filled=filled, artists=artists, highlight=highlight, label=label,
+        fig=fig, ax=ax, filled=filled, artists=artists, label=label,
         trajectory=sweep.trajectory, trajectory_loss=trajectory_loss,
         log_levels=log_levels, log_error_levels=log_error_levels, title=title, loss_label=loss_label, metrics=metrics,
         surfaces=surfaces, grids=grids, counts=list(counts), level_values=level_values,
@@ -258,7 +254,7 @@ def draw_contour(scene: Scene, values: np.ndarray) -> None:
 
 
 def set_frame(scene: Scene, n: int) -> None:
-    """Show the first n snapshots, with the nth highlighted, and the contour of that frame. Everything else stays put."""
+    """Show the first n snapshots, and the contour of that frame. Everything else stays put."""
     if not 1 <= n <= len(scene.trajectory):
         raise ValueError(f"a frame shows between 1 and {len(scene.trajectory)} snapshots, got {n}")
     if n not in scene.counts:
@@ -267,7 +263,6 @@ def set_frame(scene: Scene, n: int) -> None:
     points = scene.trajectory[:n]
     scene.artists.path.set_offsets(points)
     scene.artists.path.set_array(scene.trajectory_loss[:n])
-    scene.highlight.set_data([points[-1, 0]], [points[-1, 1]])
     scene.label.set_text(frame_label(scene, n))
 
 
@@ -298,7 +293,6 @@ class FrameState:
     dots_colorbar_limits: tuple[float, float]
     offsets: np.ndarray
     dot_values: np.ndarray
-    highlight: tuple[float, float]
     label: str
     start: tuple[float, float]
     end: tuple[float, float]
@@ -341,7 +335,6 @@ def read_frame_state(scene: Scene, n: int) -> FrameState:
         dots_colorbar_limits=(float(colorbar.ax.get_xlim()[0]), float(colorbar.ax.get_xlim()[1])),
         offsets=np.array(path.get_offsets()),
         dot_values=np.array(path.get_array()),
-        highlight=(first_float(scene.highlight.get_xdata()), first_float(scene.highlight.get_ydata())),
         label=scene.label.get_text(),
         start=(first_float(scene.artists.start.get_xdata()), first_float(scene.artists.start.get_ydata())),
         end=(first_float(scene.artists.end.get_xdata()), first_float(scene.artists.end.get_ydata())),
@@ -405,11 +398,6 @@ def check_states(states: list[FrameState], scene: Scene) -> list[Check]:
         "",
     )
     all_equal(
-        "the highlighted point is the nth path point",
-        [s.highlight == (float(scene.trajectory[s.n - 1, 0]), float(scene.trajectory[s.n - 1, 1])) for s in states],
-        "",
-    )
-    all_equal(
         "the step label matches the frame",
         [s.label.splitlines()[0] == f"step {s.n * SNAPSHOT_SPACING}" for s in states],
         ", ".join(s.label.splitlines()[0] for s in states),
@@ -453,7 +441,7 @@ def check_states(states: list[FrameState], scene: Scene) -> list[Check]:
     errors = np.abs(readings - measured[np.array(scene.counts) - 1])
     worst = int(errors.argmax())
     checks.append(Check(
-        "in every frame the contour at the highlighted point reads the network's measured loss",
+        "in every frame the contour at the latest path point reads the network's measured loss",
         bool(np.all(errors <= 0.02 + 0.1 * measured[np.array(scene.counts) - 1])),
         f"largest difference {errors[worst]:.3f} at snapshot {scene.counts[worst]}, where the loss is {measured[scene.counts[worst] - 1]:.3f}",
     ))
@@ -468,7 +456,7 @@ def check_states(states: list[FrameState], scene: Scene) -> list[Check]:
 def background_pixels(scene: Scene, n: int) -> np.ndarray:
     """Draw frame n with everything that depends on the frame or the path hidden, and return the pixels."""
     set_frame(scene, n)
-    hidden = [scene.artists.path, scene.highlight, scene.label, scene.artists.start, scene.artists.end, scene.artists.legend]
+    hidden = [scene.artists.path, scene.label, scene.artists.start, scene.artists.end, scene.artists.legend]
     for artist in hidden:
         artist.set_visible(False)
     canvas = scene.fig.canvas
