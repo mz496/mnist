@@ -22,6 +22,24 @@ def format_tags(**params: Any) -> str:
     return "_".join(tags)
 
 
+def viz_plots_dir(run_id: str) -> Path:
+    """Where a run's static plots go: viz/<run_id>/plots."""
+    return Path("viz") / run_id / "plots"
+
+
+def viz_animations_dir(run_id: str) -> Path:
+    """Where a run's animations go: viz/<run_id>/animations."""
+    return Path("viz") / run_id / "animations"
+
+
+def viz_filename(stamp: str, *tags: str, ext: str) -> str:
+    """
+    A viz file name that starts with the time it was generated, so a folder sorts chronologically, then the tags
+    (see format_tags). Empty tags are skipped: viz_filename("20261016-101500", "mode=1d_seed=0", "", ext="png").
+    """
+    return "_".join([stamp, *(tag for tag in tags if tag)]) + f".{ext}"
+
+
 def read_arrays(path: Path) -> dict[str, Any]:
     """Every array in an .npz file by key, or an empty dict if the file doesn't exist yet."""
     if not path.is_file():

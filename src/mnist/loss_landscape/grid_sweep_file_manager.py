@@ -31,6 +31,11 @@ def grid_sweep_path(run_id: str, mode: str, trajectory: bool = False, max_step: 
     return Path("checkpoints") / run_id / f"grid_sweep_{tags}.npz"
 
 
+def sweep_tags(npz: Path) -> str:
+    """The tags of a sweep's file name, i.e. the name minus its grid_sweep_ prefix and extension."""
+    return npz.stem.removeprefix("grid_sweep_")
+
+
 def save_grid_sweep(path: Path, **arrays: Any) -> None:
     """Write a sweep, adding the schema version so a writer can't forget it."""
     path.parent.mkdir(parents=True, exist_ok=True)

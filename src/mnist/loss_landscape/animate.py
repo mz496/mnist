@@ -40,7 +40,8 @@ from matplotlib.lines import Line2D
 from matplotlib.text import Text
 from matplotlib.transforms import offset_copy
 
-from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str
+from mnist.loss_landscape.file_io_utils import format_tags, viz_animations_dir, viz_filename
+from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str, sweep_tags
 from mnist.loss_landscape.snapshot_metrics_file_manager import SnapshotMetrics, create_or_load_snapshot_metrics
 from mnist.loss_landscape.snapshot_surfaces_file_manager import DIRECTION_TOLERANCE, SnapshotSurfaces, create_or_load_snapshot_surfaces
 from mnist.loss_landscape.plot import (
@@ -489,7 +490,7 @@ def check_images(scene: Scene, first: int, last: int) -> list[Check]:
     ]
 
 
-def run_preview(scene: Scene, counts: list[int], out_dir: Path, stem: str, stamp: str) -> bool:
+def run_preview(scene: Scene, counts: list[int], out_dir: Path, tags: str, stamp: str) -> bool:
     """Render the first, middle and last frames as stills, run every check, and print the results. True if all pass."""
     frame_numbers = [1, (len(counts) + 1) // 2, len(counts)]
     chosen = [counts[f - 1] for f in frame_numbers]
@@ -501,7 +502,7 @@ def run_preview(scene: Scene, counts: list[int], out_dir: Path, stem: str, stamp
 
     for f, n in zip(frame_numbers, chosen):
         set_frame(scene, n)
-        out_path = out_dir / f"{stem}_preview_f{f}_{stamp}.png"
+        out_path = out_dir / viz_filename(stamp, tags, format_tags(preview=True, frame=f), ext="png")
         scene.fig.savefig(out_path, dpi=DPI)
         print(f"Saved preview frame {f} of {len(counts)} (step {n * SNAPSHOT_SPACING}) to {out_path}")
 
@@ -531,13 +532,13 @@ def main() -> None:
     surfaces = create_or_load_snapshot_surfaces(sweep.run_id, sweep.split, sweep.trajectory, sweep.alphas, sweep.betas, counts)
     scene = build_scene(sweep, args.value, metrics, surfaces, counts)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_dir = args.npz.parent / "animations"
-    stem = f"{args.npz.stem}_{args.value}"
+    out_dir = viz_animations_dir(sweep.run_id)
+    tags = f"{sweep_tags(args.npz)}_{format_tags(value=args.value, snapshots_per_frame=args.snapshots_per_frame)}"
 
     if args.preview:
-        sys.exit(0 if run_preview(scene, counts, out_dir, stem, stamp) else 1)
+        sys.exit(0 if run_preview(scene, counts, out_dir, tags, stamp) else 1)
 
-    out_path = out_dir / f"{stem}_anim_{stamp}.mp4"
+    out_path = out_dir / viz_filename(stamp, tags, format_tags(fps=args.fps), ext="mp4")
     render_video(scene, counts, args.fps, out_path)
     print(f"Saved {len(counts)} frames ({counts[0] * SNAPSHOT_SPACING} to {counts[-1] * SNAPSHOT_SPACING} steps, {len(counts) / args.fps:.1f} seconds at {args.fps} fps) to {out_path}")
 

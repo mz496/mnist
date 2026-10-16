@@ -17,7 +17,8 @@ from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 
-from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str
+from mnist.loss_landscape.file_io_utils import format_tags, viz_filename, viz_plots_dir
+from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str, sweep_tags
 
 
 def run_label(run_id: str, max_step: int | None) -> str:
@@ -230,7 +231,7 @@ def draw_1d(npz: Path, data: np.lib.npyio.NpzFile, stamp: str) -> None:
     alphas, losses, accs = data["alphas"], data["loss"], data["acc"]
     run_id = read_str(npz, data, "run_id")
     split = read_str(npz, data, "split")
-    out_path = npz.with_name(f"{npz.stem}_{stamp}.png")
+    out_path = viz_plots_dir(run_id) / viz_filename(stamp, sweep_tags(npz), ext="png")
     plot_1d(alphas, losses, accs, out_path, run_id=run_id, split=split)
     print("Saved 1D plot to", out_path)
 
@@ -247,7 +248,7 @@ def draw_2d(npz: Path, data: np.lib.npyio.NpzFile, style: str, stamp: str) -> No
     # The loss at each path point, read off the saved loss grid at that point's position. Not recomputed per snapshot.
     trajectory_loss = sample_grid(alphas, betas, losses, trajectory) if trajectory is not None else None
     for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
-        out_path = npz.with_name(f"{npz.stem}_{name}_{style}_{stamp}.png")
+        out_path = viz_plots_dir(run_id) / viz_filename(stamp, sweep_tags(npz), format_tags(value=name, style=style), ext="png")
         title = f"{split_label(split)} {'loss' if name == 'loss' else 'accuracy'}"
         if style == "contour":
             plot_2d_contour(alphas, betas, values, out_path, title, log_levels=log_levels, trajectory=trajectory, log_error_levels=log_error_levels, run_id=run_id, explained_variance=explained_variance, trajectory_loss=trajectory_loss, trajectory_loss_label=f"{split_label(split)} loss at path point (from the grid)", max_step=max_step)

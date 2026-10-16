@@ -121,9 +121,9 @@ def test_preview_passes_and_writes_three_stills(scene: Scene, tmp_path: Path):
     counts = frame_counts(len(scene.trajectory), 10)
     assert run_preview(scene, counts, tmp_path / "animations", "stem", "stamp")
     assert sorted(p.name for p in (tmp_path / "animations").iterdir()) == [
-        "stem_preview_f1_stamp.png",
-        "stem_preview_f2_stamp.png",
-        "stem_preview_f4_stamp.png",
+        "stamp_stem_preview=true_frame=1.png",
+        "stamp_stem_preview=true_frame=2.png",
+        "stamp_stem_preview=true_frame=4.png",
     ]
 
 
