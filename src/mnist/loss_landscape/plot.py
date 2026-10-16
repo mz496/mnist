@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 
+from mnist.loss_landscape.compute_surface import SCHEMA_VERSION
+
 
 def split_label(split: str) -> str:
     """The name of the data a sweep was measured on ("train" or "validation"), as it should appear in titles."""
@@ -147,11 +149,38 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def major_version(version: str) -> int:
+    """The major part of a "major.minor" version string like "0.1"."""
+    return int(version.split(".")[0])
+
+
+def check_schema_version(npz: Path, data: np.lib.npyio.NpzFile) -> None:
+    """
+    Refuse a file that doesn't record its schema version, or whose major version is behind this reader's.
+    A newer minor version is fine, since a minor bump only adds keys.
+    """
+    if "schema_version" not in data.files:
+        raise ValueError(f"{npz} has no 'schema_version' key. Regenerate it with the current compute_surface, which writes schema {SCHEMA_VERSION}.")
+    file_version = str(data["schema_version"])
+    try:
+        file_major = major_version(file_version)
+    except ValueError:
+        raise ValueError(f"{npz} has an unreadable schema_version {file_version!r}, expected something like {SCHEMA_VERSION!r}.") from None
+    if file_major < major_version(SCHEMA_VERSION):
+        raise ValueError(f"{npz} is schema {file_version}, behind this reader's schema {SCHEMA_VERSION} on the major version. Regenerate it with the current compute_surface.")
+
+
+def read_str(npz: Path, data: np.lib.npyio.NpzFile, key: str) -> str:
+    """A string key that compute_surface always records. Fails loudly if it's missing."""
+    if key not in data.files:
+        raise ValueError(f"{npz} has no '{key}' key, which compute_surface always records. The file is damaged or was not written by compute_surface.")
+    return str(data[key])
+
+
 def draw_1d(npz: Path, data: np.lib.npyio.NpzFile) -> None:
     alphas, losses, accs = data["alphas"], data["loss"], data["acc"]
-    run_id = str(data["run_id"]) if "run_id" in data.files else None
-    # Older files don't record the split; they were all measured on validation
-    split = str(data["split"]) if "split" in data.files else "validation"
+    run_id = read_str(npz, data, "run_id")
+    split = read_str(npz, data, "split")
     out_path = npz.with_suffix(".png")
     plot_1d(alphas, losses, accs, out_path, run_id=run_id, split=split)
     print("Saved 1D plot to", out_path)
@@ -162,9 +191,8 @@ def draw_2d(npz: Path, data: np.lib.npyio.NpzFile, style: str) -> None:
     # Only present for sweeps run with --trajectory-plot
     trajectory = data["trajectory"] if "trajectory" in data.files else None
     explained_variance = data["explained_variance"] if "explained_variance" in data.files else None
-    run_id = str(data["run_id"]) if "run_id" in data.files else None
-    # Older files don't record the split; they were all measured on validation
-    split = str(data["split"]) if "split" in data.files else "validation"
+    run_id = read_str(npz, data, "run_id")
+    split = read_str(npz, data, "split")
     # The loss at each path point, read off the saved loss grid at that point's position. Not recomputed per snapshot.
     trajectory_loss = sample_grid(alphas, betas, losses, trajectory) if trajectory is not None else None
     for name, values, log_levels, log_error_levels in (("loss", losses, True, False), ("acc", accs, False, True)):
@@ -182,9 +210,9 @@ def main() -> None:
     if not args.npz.is_file():
         raise FileNotFoundError(f"sweep file not found: {args.npz}")
     with np.load(args.npz) as data:
-        if "mode" not in data.files:
-            raise ValueError(f"{args.npz} has no 'mode' key, so it can't be told apart as a 1d or 2d sweep. Regenerate it with the current compute_surface.")
-        mode = str(data["mode"])
+        # Before anything else: the other keys can't be trusted from a file this reader doesn't understand
+        check_schema_version(args.npz, data)
+        mode = read_str(args.npz, data, "mode")
         if mode == "1d":
             draw_1d(args.npz, data)
         elif mode == "2d":

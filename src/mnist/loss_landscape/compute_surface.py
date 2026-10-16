@@ -15,6 +15,12 @@ from mnist.model import LeNet5
 from mnist.train import load_checkpoint, load_training_snapshots
 from mnist.utils import get_device
 
+# Version of the .npz layout this script writes. plot.py imports it and refuses files that are behind on the major version.
+# Bump the minor version when a key is added. Bump the major version when a key is removed, renamed, or changes meaning.
+# Version 0.1 keys, for both modes: alphas, loss, acc, seed, run_id, split, mode, schema_version.
+# 2d adds betas. 2d with --trajectory-plot adds trajectory and explained_variance.
+SCHEMA_VERSION = "0.1"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -89,6 +95,7 @@ def main():
             run_id=np.array(run_id),
             split=np.array("validation"),  # which data the loss and accuracy were measured on
             mode=np.array(args.mode),  # "1d": the plot reads this to know what kind of sweep the file is
+            schema_version=np.array(SCHEMA_VERSION),
         )
         print("Saved 1D sweep to", out_path)
 
@@ -172,6 +179,7 @@ def main():
             run_id=np.array(run_id),
             split=np.array(split),  # which data the loss and accuracy were measured on
             mode=np.array(args.mode),  # "2d": the plot reads this to know what kind of sweep the file is
+            schema_version=np.array(SCHEMA_VERSION),
             **extra,
         )
         print("Saved 2D sweep to", out_path)
