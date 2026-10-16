@@ -3,13 +3,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from mnist.loss_landscape.file_io_utils import format_tags, viz_animations_dir, viz_filename, viz_plots_dir
 from mnist.loss_landscape.plot.grid_sweep_file_manager import GRID_SWEEP_SCHEMA_VERSION, check_grid_sweep_schema_version, grid_sweep_path, save_grid_sweep, sweep_tags
-
-
-def test_format_tags_names_match_cli_flags_and_skip_unset_params() -> None:
-    assert format_tags(mode="2d", trajectory_plot=True, max_step=600) == "mode=2d_trajectory-plot=true_max-step=600"
-    assert format_tags(mode="1d", trajectory_plot=False, max_step=None, seed=0) == "mode=1d_seed=0"
 
 
 def test_grid_sweep_path_is_tagged_by_params_and_lives_with_the_checkpoint() -> None:
@@ -42,16 +36,6 @@ def test_check_grid_sweep_schema_version_rejects_missing_version(tmp_path: Path)
     np.savez(path, alphas=np.zeros(1))
     with np.load(path) as data, pytest.raises(ValueError, match="no 'schema_version'"):
         check_grid_sweep_schema_version(path, data)
-
-
-def test_viz_dirs_are_namespaced_by_run_id() -> None:
-    assert viz_plots_dir("run") == Path("viz") / "run" / "plots"
-    assert viz_animations_dir("run") == Path("viz") / "run" / "animations"
-
-
-def test_viz_filename_starts_with_the_stamp_and_skips_empty_tags() -> None:
-    assert viz_filename("20261016-101500", "mode=2d", "value=loss", ext="png") == "20261016-101500_mode=2d_value=loss.png"
-    assert viz_filename("20261016-101500", "mode=1d_seed=0", "", ext="png") == "20261016-101500_mode=1d_seed=0.png"
 
 
 def test_sweep_tags_strip_the_file_prefix() -> None:
