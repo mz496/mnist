@@ -28,10 +28,14 @@ class Dataloaders:
     validation: DataLoader[InputDatasetItem]
     test: DataLoader[InputDatasetItem]
 
+# Mean and std of the MNIST training pixels, after scaling to [0, 1].
+MNIST_MEAN = 0.1307
+MNIST_STD = 0.3081
+
 # Mapping from input data. 
 def collate(inputs: list[InputDatasetItem]) -> tuple[Tensor, Tensor]:
-    # TODO: What happens if we do/dont center the data as a startpoint?
-    images = torch.stack([i["image"] for i in inputs]).float() / 255  # [B, 1, 28, 28], of float32s
+    images = torch.stack([i["image"] for i in inputs]).float() / 255  # [B, 1, 28, 28], of float32s in [0, 1]
+    images = (images - MNIST_MEAN) / MNIST_STD  # roughly mean 0, std 1
     labels = torch.stack([i["label"] for i in inputs])  # [B], int64
     return images, labels
     

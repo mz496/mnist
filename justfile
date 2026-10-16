@@ -4,7 +4,7 @@ pytest:
 train:
     uv run python -m mnist.train
 
-# e.g. just hyperparameter-sweep train.seed=1,2,3,4 --workers 4
+# e.g. just hyperparameter-sweep train.seed=1,2,3,4 --workers 4 --name seed-check
 hyperparameter-sweep *args:
     uv run python -m mnist.hyperparameter_sweep {{args}}
 
