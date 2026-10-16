@@ -34,9 +34,11 @@ from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import BoundaryNorm
 from matplotlib.contour import QuadContourSet
+from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.text import Text
+from matplotlib.transforms import offset_copy
 
 from mnist.loss_landscape.grid_sweep_file_manager import check_grid_sweep_schema_version, read_str
 from mnist.loss_landscape.snapshot_metrics_file_manager import SnapshotMetrics, create_or_load_snapshot_metrics
@@ -52,16 +54,46 @@ from mnist.loss_landscape.plot import (
 )
 from mnist.train import SNAPSHOT_SPACING
 
-# The same resolution as the static plots. With the 7 by 7.6 inch figure, which has room under the plot for the readout and
-# the legend, it gives 1050 by 1140 pixels. H.264 needs both to be even.
+# The same resolution as the static plots. H.264 needs the pixel width and height to be even.
 DPI = 150
-FIGSIZE = (7, 7.6)
+FIGURE_WIDTH = 7.0
 
-# The step readout and the legend sit under the plot, between its x label and the dots' colorbar. These are in axes
-# coordinates, measured down from the bottom edge of the plot.
-READOUT_ANCHOR = (0.0, -0.16)
-LEGEND_ANCHOR = (1.0, -0.16)
-DOTS_COLORBAR_PAD = 0.42
+# The figure's height is worked out from the plot's shape, from these sizes in inches. Under the plot, from its bottom edge
+# down: its x label, then the step readout and the legend, then the dots' colorbar with its tick labels and label.
+TOP_MARGIN = 0.7
+READOUT_OFFSET = 0.55
+DOTS_COLORBAR_OFFSET = 1.45
+DOTS_COLORBAR_HEIGHT = 0.2
+BOTTOM_MARGIN = 0.4
+
+
+def layout_figure(fig: Figure, ax: Axes, contour_colorbar: Colorbar, dots_colorbar: Colorbar) -> None:
+    """
+    Lay the figure out once, with the plot at the top, its contour colorbar as tall as it is, and the dots' colorbar a fixed
+    distance under it, which leaves room between them for the readout and the legend. The height of the figure is chosen to fit.
+    matplotlib's own layout can't do this, since it keeps a plot with a fixed aspect centered in the space it has.
+    """
+    fig.set_size_inches(FIGURE_WIDTH, 6.0)
+    fig.tight_layout()
+    fig.canvas.draw()  # applies the plot's fixed aspect, so its size is known
+    plot_height = float(ax.get_position().height) * 6.0
+    height = TOP_MARGIN + plot_height + DOTS_COLORBAR_OFFSET + DOTS_COLORBAR_HEIGHT + BOTTOM_MARGIN
+    height = 2 * round(height * DPI / 2) / DPI  # a whole, even number of pixels
+    fig.set_size_inches(FIGURE_WIDTH, height)
+    fig.tight_layout()
+    fig.canvas.draw()
+
+    # Narrower than matplotlib leaves it, so the contour colorbar's tick labels and label fit beside it
+    pos = ax.get_position()
+    top = 1 - TOP_MARGIN / height
+    scale = 0.92
+    ax.set_position((pos.x0, top - pos.height * scale, pos.width * scale, pos.height * scale))
+    pos = ax.get_position()
+    bottom = top - pos.height
+    contour_width = contour_colorbar.ax.get_position().width
+    contour_colorbar.ax.set_position((pos.x1 + 0.02, bottom, contour_width, pos.height))
+    dots_height = DOTS_COLORBAR_HEIGHT / height
+    dots_colorbar.ax.set_position((pos.x0 + 0.1 * pos.width, bottom - DOTS_COLORBAR_OFFSET / height, 0.8 * pos.width, dots_height))
 
 
 @dataclass
@@ -159,29 +191,36 @@ def build_scene(sweep: Sweep, value: str, metrics: SnapshotMetrics, surfaces: Sn
     loss_label = f"{split_label(sweep.split)} loss of the network at that step"
     trajectory_loss = metrics.loss
 
-    contour_label = f"{title} on the plane through the network at that step"
-    fig, ax, filled = draw_contour_background(sweep.alphas, sweep.betas, shown, contour_label, log_levels=log_levels, log_error_levels=log_error_levels, level_values=level_values, equal_color_steps=True, figsize=FIGSIZE)
+    # The labels beside the plot are as tall as the plot, which is short, so they are broken over lines
+    contour_label = f"{title} on the plane\nthrough the network\nat that step"
+    fig, ax, filled = draw_contour_background(sweep.alphas, sweep.betas, shown, contour_label, log_levels=log_levels, log_error_levels=log_error_levels, level_values=level_values, equal_color_steps=True, figsize=(FIGURE_WIDTH, 6.0))
     contour_artists = list(ax.collections)  # the filled contour and its lines. The path is added after this
     levels, norm, _ = contour_levels(level_values, log_levels, log_error_levels, 20, equal_color_steps=True)
+    # Anchors under the plot: the plot's own x coordinates, and a distance in inches below its bottom edge
+    below_plot = offset_copy(ax.transAxes, fig=fig, x=0.0, y=-READOUT_OFFSET, units="inches")
     artists = draw_trajectory_overlay(
         fig, ax, sweep.trajectory, trajectory_loss, loss_label, sweep.explained_variance,
-        log_dot_colors=True, colorbar_pad=DOTS_COLORBAR_PAD,
-        legend_kwargs={"loc": "upper right", "bbox_to_anchor": LEGEND_ANCHOR, "ncol": 2, "frameon": False},
+        log_dot_colors=True,
+        legend_kwargs={"loc": "upper right", "bbox_to_anchor": (1.0, 0.0), "bbox_transform": below_plot, "ncol": 2, "frameon": False},
     )
     ax.set_aspect("equal")
+    ax.set_ylabel(ax.get_ylabel().replace(", weight-space", ",\nweight-space"))
     ax.set_title(f"{title}\n{run_label(sweep.run_id, sweep.max_step)}")
 
     # The only things that move: a marker on the latest point and the step counter. The marker sits above the start and end
     # markers, so it stays visible on the first frames, where the path hasn't left the start marker yet.
     highlight = ax.plot([], [], linestyle="none", marker="o", markerfacecolor="black", markeredgecolor="white", markersize=7, zorder=5.5)[0]
-    label = ax.text(*READOUT_ANCHOR, "", transform=ax.transAxes, va="top", ha="left", fontsize=11)
+    label = ax.text(0.0, 0.0, "", transform=below_plot, va="top", ha="left", fontsize=11)
 
     # Freeze the scales: the dots' color range comes from the whole path, and the axes stop autoscaling
     artists.path.set_clim(float(trajectory_loss.min()), float(trajectory_loss.max()))
     ax.set_xlim(ax.get_xlim())
     ax.set_ylim(ax.get_ylim())
     ax.set_autoscale_on(False)
-    fig.tight_layout()  # once. A layout pass per frame could shift the axes by a pixel
+    dots_colorbar = artists.path.colorbar
+    contour_colorbar = filled.colorbar
+    assert dots_colorbar is not None and contour_colorbar is not None, "both colorbars were just drawn"
+    layout_figure(fig, ax, contour_colorbar, dots_colorbar)  # once. A layout pass per frame could shift the axes by a pixel
 
     scene = Scene(
         fig=fig, ax=ax, filled=filled, artists=artists, highlight=highlight, label=label,

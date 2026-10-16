@@ -25,7 +25,7 @@ from mnist.evaluate import evaluate
 from mnist.loss_landscape import snapshot_metrics_file_manager as snapshot_metrics, snapshot_surfaces_file_manager as snapshot_surfaces
 from mnist.loss_landscape.lib import get_pca_directions_for_snapshots, plane_base, project_snapshots_onto_pca_directions
 from mnist.loss_landscape.plot import sample_grid
-from mnist.loss_landscape.grid_sweep_file_manager import SCHEMA_VERSION
+from mnist.loss_landscape.grid_sweep_file_manager import GRID_SWEEP_SCHEMA_VERSION
 from mnist.loss_landscape.snapshot_metrics_file_manager import SnapshotMetrics, create_or_load_snapshot_metrics
 from mnist.loss_landscape.snapshot_surfaces_file_manager import SnapshotSurfaces, create_or_load_snapshot_surfaces
 from mnist.model import LeNet5
@@ -48,7 +48,7 @@ def write_sweep(path: Path, mode: str = "2d", with_trajectory: bool = True, n_po
         "run_id": np.array("test-run"),
         "split": np.array("train"),
         "mode": np.array(mode),
-        "schema_version": np.array(SCHEMA_VERSION),
+        "schema_version": np.array(GRID_SWEEP_SCHEMA_VERSION),
     }
     if with_trajectory:
         t = np.linspace(0.0, 1.0, n_points)[:, None]
