@@ -80,11 +80,11 @@ Instead of fiddling with hyperparameters yet, I decided to push forward on this 
 Also, I wanted to see whether I could watch something more visual than the training loss change while addressing that potential plateau/initialization issue from Oct 12.
 
 #### 1D
-The gist of it in 1D (I am changing some notation from the paper to make it slightly clearer IMO):
+The gist of it in 1D (I am changing some notation from the paper to make it slightly clearer IMO, using the Roman alphabet for vectors and Greek for variables):
 - Take a trained network's many-dimensional weights $\theta^\star$; this is your (0, 0).
-- In some direction vector $\overset{\rightharpoonup}{\alpha}$ normalized relative to the weights, slide along those vectors (parametrized by, say, $u$) and evaluate the network at points along those vectors: $L(\theta^\star + u\overset{\rightharpoonup}{\alpha})$.
+- In some direction vector $\overset{\rightharpoonup}{u}$ normalized relative to the weights, slide along those vectors (parametrized by, say, $\alpha$) and evaluate the network at points along those vectors: $L(\theta^\star + \alpha\overset{\rightharpoonup}{u})$.
   - This direction vector is normalized relative to the filter weights.
-- Plot loss vs. $u$.
+- Plot loss vs. $\alpha$.
 
 I got 1D plots working first, which roughly matches the graphs from earlier: validation loss and accuracy peak correctly (at a minimum and a maximum respectively) which is a good sign:
 
@@ -94,7 +94,7 @@ I got 1D plots working first, which roughly matches the graphs from earlier: val
 
 In 2D, this is roughly the same:
 - Take a trained network's many-dimensional weights $\theta^\star$; this is your (0, 0).
-- In some direction vectors $\overset{\rightharpoonup}{\alpha}$, $\overset{\rightharpoonup}{\beta}$, both normalized relative to the weights, slide along those vectors (parametrized by, say, $u$, $v$) and evaluate the network at points along those vectors: $L(\theta^\star + u\overset{\rightharpoonup}{\alpha} + v\overset{\rightharpoonup}{\beta})$.
+- In some direction vectors $\overset{\rightharpoonup}{u}$, $\overset{\rightharpoonup}{v}$, both normalized relative to the weights, slide along those vectors (parametrized by, say, $\alpha$, $\beta$) and evaluate the network at points along those vectors: $L(\theta^\star + \alpha\overset{\rightharpoonup}{u} + \beta\overset{\rightharpoonup}{v})$.
 - Plot a contour where your x,y position is the $\alpha$, $\beta$ coordinate and color is the value (loss or validation).
 
 The 2D plots with the method of random directions around the best-validation-loss weights. Loss is a bit nicer in that the bands more clearly show the minimum, but probably could have used log-scale for both:
@@ -109,7 +109,7 @@ I planned out the changes to plot the training trajectory.
 
 ### Oct 15
 
-Finished the training trajectory plotting with updated color and band-scale so that we get both log-spaced bands and log-spaced contrast.
+Working on plotting the training trajectory.
 
 The algorithm is:
 - Snapshot $n$ weights during training.
@@ -119,7 +119,11 @@ The algorithm is:
 - Center the trajectory on the weights so that it ends at (0,0).
 - Use the final training snapshot as $\theta^\star$ for the contour plot. We need to do this because we are using training snapshots for the trajectory points, so another plane would be incorrect, at least relative to the final point.
 
-![](img/2026-10-14T19:28:51_45xyzktb_2d_acc_contour.png)
+#### Initial attempt (buggy)
+
+My first plot came out like this:
+
+![](img/2026-10-15-buggy-loss-contour-full.png)
 
 A few observations:
 - This does not quite capture that early training dropoff I was hoping for, and that part of the path cuts across the gradient, probably because of earlier movement in some other dimension.
@@ -132,4 +136,27 @@ A few observations:
 
 ![](img/2026-10-15-loss-at-500.png)
 
+#### Fixing the plot
 
+I found a pretty bad bug on the trajectory codepath where the points and the plane were using the wrong direction vectors, meaning that all the points and plane except for the final one were meaningless.
+- I found this by adding a `--max-steps=N` param that visualizes the first $N$ steps only, and saw this nonsensical plot that the training loss was nearly flat across the first 300 points, even though loss was supposedly dropping the most steeply at that point. (see below; the training loss range is tiny)
+- I could have noticed this earlier with better types/dimension analysis.
+
+![](img/2026-10-15-buggy-loss-contour-first-300.png)
+
+After fixing it, the plots look more sane, although the training loss values are not absolute and are still relative to the plane. Still working on the implications of this, but it's much closer to the true losses anyway - the first point should always be fixed at $\ln(10)\approx 2.3$.
+
+> Derivation: Use the cross entropy function where
+> - the target distribution is $q_i=1$ for the correct class and $q_i=0$ for all others
+> - the model's predicted distribution starts out randomizing the distribution $p_i$ for all 0-9
+>
+> Therefore, if the correct class is $c$, then
+> $$
+> -\sum_iq_i \ln(p_i)=-\ln(p_c)=-\ln\frac{1}{10}=\ln10
+> $$
+
+By first $N$ steps. Recall that most of the movement happens before step 600:
+
+| 100 | 300 | 600 | full |
+| --- | --- | --- | --- |
+| ![](img/2026-10-15-loss-contour-first-100.png) | ![](img/2026-10-15-loss-contour-first-300.png) | ![](img/2026-10-15-loss-contour-first-600.png) | ![](img/2026-10-15-loss-contour-all.png) |
