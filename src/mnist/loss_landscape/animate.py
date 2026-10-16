@@ -5,7 +5,7 @@
 Animate a training run's path across the loss surface of its full-run PCA plane.
 
 Every frame uses the same plane and the same scales as the static full-run plot. The sweep file already holds every
-snapshot projected onto that plane, so frame f just draws the first f * stride of those points and highlights the last
+snapshot projected onto that plane, so frame f just draws the first f * snapshots_per_frame of those points and highlights the last
 one. The plane and the contour are never refit or recomputed, so nothing can drift between frames.
 
 The network itself is evaluated, in two ways. Each dot is colored by the loss of the network at that training step, and
@@ -52,9 +52,16 @@ from mnist.loss_landscape.plot import (
 )
 from mnist.train import SNAPSHOT_SPACING
 
-# The same resolution as the static plots. With the 7 by 6 inch figure it gives 1050 by 900 pixels, both even,
-# which the H.264 video format needs.
+# The same resolution as the static plots. With the 7 by 7.6 inch figure, which has room under the plot for the readout and
+# the legend, it gives 1050 by 1140 pixels. H.264 needs both to be even.
 DPI = 150
+FIGSIZE = (7, 7.6)
+
+# The step readout and the legend sit under the plot, between its x label and the dots' colorbar. These are in axes
+# coordinates, measured down from the bottom edge of the plot.
+READOUT_ANCHOR = (0.0, -0.16)
+LEGEND_ANCHOR = (1.0, -0.16)
+DOTS_COLORBAR_PAD = 0.42
 
 
 @dataclass
@@ -121,11 +128,11 @@ def load_sweep(npz: Path) -> Sweep:
         )
 
 
-def frame_counts(total: int, stride: int) -> list[int]:
-    """How many snapshots each frame shows: stride, 2 * stride, and so on, always ending on the whole run."""
-    if stride < 1:
-        raise ValueError(f"--stride must be at least 1, got {stride}")
-    counts = list(range(stride, total + 1, stride))
+def frame_counts(total: int, snapshots_per_frame: int) -> list[int]:
+    """How many snapshots each frame shows: snapshots_per_frame, 2 * snapshots_per_frame, and so on, always ending on the whole run."""
+    if snapshots_per_frame < 1:
+        raise ValueError(f"--snapshots-per-frame must be at least 1, got {snapshots_per_frame}")
+    counts = list(range(snapshots_per_frame, total + 1, snapshots_per_frame))
     if not counts or counts[-1] != total:
         counts.append(total)
     return counts
@@ -153,17 +160,21 @@ def build_scene(sweep: Sweep, value: str, metrics: SnapshotMetrics, surfaces: Sn
     trajectory_loss = metrics.loss
 
     contour_label = f"{title} on the plane through the network at that step"
-    fig, ax, filled = draw_contour_background(sweep.alphas, sweep.betas, shown, contour_label, log_levels=log_levels, log_error_levels=log_error_levels, level_values=level_values)
+    fig, ax, filled = draw_contour_background(sweep.alphas, sweep.betas, shown, contour_label, log_levels=log_levels, log_error_levels=log_error_levels, level_values=level_values, equal_color_steps=True, figsize=FIGSIZE)
     contour_artists = list(ax.collections)  # the filled contour and its lines. The path is added after this
-    levels, norm, _ = contour_levels(level_values, log_levels, log_error_levels, 20)
-    artists = draw_trajectory_overlay(fig, ax, sweep.trajectory, trajectory_loss, loss_label, sweep.explained_variance)
+    levels, norm, _ = contour_levels(level_values, log_levels, log_error_levels, 20, equal_color_steps=True)
+    artists = draw_trajectory_overlay(
+        fig, ax, sweep.trajectory, trajectory_loss, loss_label, sweep.explained_variance,
+        log_dot_colors=True, colorbar_pad=DOTS_COLORBAR_PAD,
+        legend_kwargs={"loc": "upper right", "bbox_to_anchor": LEGEND_ANCHOR, "ncol": 2, "frameon": False},
+    )
     ax.set_aspect("equal")
     ax.set_title(f"{title}\n{run_label(sweep.run_id, sweep.max_step)}")
 
     # The only things that move: a marker on the latest point and the step counter. The marker sits above the start and end
     # markers, so it stays visible on the first frames, where the path hasn't left the start marker yet.
     highlight = ax.plot([], [], linestyle="none", marker="o", markerfacecolor="black", markeredgecolor="white", markersize=7, zorder=5.5)[0]
-    label = ax.text(0.02, 0.97, "", transform=ax.transAxes, va="top", ha="left", fontsize=11, zorder=6, bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.85})
+    label = ax.text(*READOUT_ANCHOR, "", transform=ax.transAxes, va="top", ha="left", fontsize=11)
 
     # Freeze the scales: the dots' color range comes from the whole path, and the axes stop autoscaling
     artists.path.set_clim(float(trajectory_loss.min()), float(trajectory_loss.max()))
@@ -317,7 +328,7 @@ def check_states(states: list[FrameState], scene: Scene) -> list[Check]:
         f"expected x {expected_xlim}, y {expected_ylim}",
     ))
 
-    expected_levels, _, _ = contour_levels(scene.level_values, scene.log_levels, scene.log_error_levels, 20)
+    expected_levels, _, _ = contour_levels(scene.level_values, scene.log_levels, scene.log_error_levels, 20, equal_color_steps=True)
     all_equal("contour levels identical across frames", [np.array_equal(s.levels, first.levels) for s in states], f"{len(first.levels)} levels")
     checks.append(Check(
         "contour levels equal the ones worked out from every frame's grid",
@@ -467,8 +478,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Animate the training path on the loss surface of a full-run trajectory sweep, as an MP4")
     parser.add_argument("npz", type=Path, help="path to a 2d sweep of a full run, saved by compute_surface with --trajectory-plot")
     parser.add_argument("--value", choices=["loss", "acc"], default="loss", help="which metric this animation tracks")
-    parser.add_argument("--stride", type=int, default=10, help="how many snapshots progress per frame of video")
-    parser.add_argument("--fps", type=int, default=10, help="output video fps")
+    parser.add_argument("--snapshots-per-frame", type=int, default=5, help="how many snapshots progress per frame of video")
+    parser.add_argument("--fps", type=int, default=20, help="output video fps")
     parser.add_argument("--preview", action="store_true", help="render only the first, middle and last frames as stills")
     return parser.parse_args()
 
@@ -476,7 +487,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     sweep = load_sweep(args.npz)
-    counts = frame_counts(len(sweep.trajectory), args.stride)
+    counts = frame_counts(len(sweep.trajectory), args.snapshots_per_frame)
     metrics = create_or_load_snapshot_metrics(sweep.run_id, sweep.split, len(sweep.trajectory))
     surfaces = create_or_load_snapshot_surfaces(sweep.run_id, sweep.split, sweep.trajectory, sweep.alphas, sweep.betas, counts)
     scene = build_scene(sweep, args.value, metrics, surfaces, counts)
