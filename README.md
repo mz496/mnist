@@ -184,6 +184,8 @@ Process:
 | ![](img/2026-10-16-train-loss-by-seed-unnormalized.png) | ![](img/2026-10-16-train-loss-by-seed-normalized.png) |
 
 - Could there have been alternate explanations? My stats is a little shaky here; I'm sure I could run a statsig check here, but this feels pretty decisive to me.
-- As for LeCun's reference to "zigzagging", that must just be imprecise, or in a different dimension than we are visualizing with the PCA, i.e. excessive movement in these other dimensions means we are not progressing toward the goal in these two.
+- As for LeCun's reference to "zigzagging", maybe that's imprecise, or in a different dimension than we are visualizing here with the PCA, i.e. excessive movement in these other dimensions means we are not progressing toward the goal in these two. You can kind of see it here where the path meanders during this 200-step stretch where the loss doesn't drop much, but that's a bit of a stretch.
 
+<video src="https://github.com/mz496/mnist/raw/main/img/2026-10-16-video-slow-train_mode=2d_trajectory-plot=true_max-step=200_value=loss_snapshots-per-frame=1_fps=20.mp4" controls muted loop width="100%"></video>
+ 
 
