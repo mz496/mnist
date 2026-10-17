@@ -148,6 +148,7 @@ After fixing it, the plots look more sane, although the training loss values are
 > - the model's predicted distribution starts out randomizing the distribution $p_i$ for all 0-9
 >
 > Therefore, if the correct class is $c$, then
+>
 > $$
 > -\sum_iq_i \ln(p_i)=-\ln(p_c)=-\ln\frac{1}{10}=\ln10
 > $$
