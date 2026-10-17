@@ -137,6 +137,8 @@ A few observations:
 
 #### Fixing the plot
 
+Actually most of my initial observations from the initial buggy attempt were misguided.
+
 I found a pretty bad bug on the trajectory codepath where the points and the plane were using the wrong direction vectors, meaning that all the points and plane except for the final one were meaningless.
 - I found this by adding a `--max-steps=N` param that visualizes the first $N$ steps only, and saw this nonsensical plot that the training loss was nearly flat across the first 300 points, even though loss was supposedly dropping the most steeply at that point. (see below; the training loss range is tiny)
 - I could have noticed this earlier with better types/dimension analysis.
