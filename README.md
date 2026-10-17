@@ -1,30 +1,27 @@
 # MNIST handwritten digit reimplementation
 
-- [x] Set up Hugging Face data ingest + W&B logging
-- [x] Set up train loop
-- [x] Set up validation loop 
-- [x] Set up test loop
-- [x] Visualize loss landscape
-
-## Things I learned
-
-(and/or did not think about the last time I implemented something like this in ~2017)
-
-- Thinking a lot more about types and truly understanding the matrix math. I spend much more time thinking about types. Pytorch type stubs are pretty bad
-- Lazy loading, CPU/GPU data transfer somewhat nonintuitive; dataset is probably still too small to see actual differences here
-- W&B is nice for plotting/logging
-- Role of AI - I basically went back to 2023 in some ways, not allowing the AI to write code for me unless it was generic stuff I don't really care about (like matplotlib libraries, which I sped through ie letting a second agent rip while I was asking a main agent questions). But better since it knows my context, can read the other reference repo, etc.
+What is this? (tl;dr)
+- I implemented LeNet5 [(LeCun et al, 1998)](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf) by hand in PyTorch to solve the handwritten digit classification task on the MNIST dataset.
+- While poring over the meaning of each line in a modern implementation, I found a data normalization step that I could experiment with including/excluding.
+- I noticed an initial plateau in the loss curve which might have been related.
+- To see if I could gain intuition, I took a detour through [Visualizing the Loss Landscape of Neural Nets (Li et al, 2018)](https://arxiv.org/html/1712.09913) whose filter-normalized direction vector technique allows for effective visualization of a network's loss function.
+  - I extended it to produce an animation of the loss at multiple points during training, but did not find it very useful for the actual plateau question.
+- I empirically verify that the simple initialization fix does indeed contribute to faster training by gathering several seeds as a baseline and then comparing baseline improperly-initialized training with properly-initialized training on those same seeds.
 
 
-## Log
 
-I started out with a goal:
+Goals:
 - Build understanding and intuition of a problem
 - Learn how to use modern tooling
 - Build the skill of asking interesting questions and answering them
 
-Using the handwritten digit classification task on MNIST as a testbed.
+Things I remain inspired by, but left out of scope for now:
+- Visualizations of the network's filters and what features they learn: [Yann LeCun's site, 1998](http://yann.lecun.com/exdb/lenet/)
+- Visualizing the MNIST dataset itself via dimensionality reduction: [Chris Olah's blog, 2014](https://colah.github.io/posts/2014-10-Visualizing-MNIST/)
 
+---
+
+## Raw log
 
 ### Oct 7
 
@@ -187,5 +184,26 @@ Process:
 - As for LeCun's reference to "zigzagging", maybe that's imprecise, or in a different dimension than we are visualizing here with the PCA, i.e. excessive movement in these other dimensions means we are not progressing toward the goal in these two. You can kind of see it here where the path meanders during this 200-step stretch where the loss doesn't drop much, but that's a bit of a stretch.
 
 <video src="https://github.com/mz496/mnist/raw/main/img/2026-10-16-video-slow-train_mode=2d_trajectory-plot=true_max-step=200_value=loss_snapshots-per-frame=1_fps=20.mp4" controls muted loop width="100%"></video>
- 
 
+---
+
+## Things I learned
+
+(and/or did not think about the last time I implemented something like this in ~2017)
+
+- My opinions on style have rightfully evolved from "is the file formatted correctly?" to "are the function names, locations, interfaces, and dependencies solid?"
+- Thinking a lot more about truly understanding the matrix math, but driven by a purpose, and not just passing my linear algebra courses.
+- Thinking a lot more about type annotations. PyTorch type stubs can be pretty bad sometimes.
+- Thinking through the implications of lazy loading and CPU/GPU data transfer are new to me and somewhat nonintuitive, although the dataset is probably still too small to see actual differences here.
+- W&B is nice for interactive plotting/logging.
+
+Some learnings on learning with AI:
+
+- I spent the first ~80% of this as a 2023 programmer, not letting AI write anything for me—copy-pasting from Claude, and no Cursor Tab—unless it was a random helper I've written a million times or finding the right library function for a task (mostly I/O-type tasks).
+  - This task is so well-known that just mentioning it already started Claude down the path of "here's exactly how everything should go," and I wanted to build up from zero to really understand the process.
+  - This meant I let myself fall into mistakes just so I could realize directly why they were wrong.
+- I also used Sonnet 5.5 for everything, which was surprisingly effective after using Opus 5.5 day-to-day previously. Relative to Opus, I think the most notable things were:
+  - it would fail to forget things that I told it to forget, e.g. I've already dropped this variable name from the plan, please stop referencing it
+  - I would have to actively question its line of thinking if it agreed with me too much, which might have been a property of how self-contained and well-known this task is, but I think I preferred questioning wrong output tokens sooner
+- Later on, I started to let AI rip a bit more especially when it came to matplotlib and the mechanics of "how do I plot this thing"
+- I also used it extensively for refactoring
