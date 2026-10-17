@@ -140,8 +140,8 @@ A few observations:
 Actually most of my initial observations from the initial buggy attempt were misguided.
 
 I found a pretty bad bug on the trajectory codepath where the points and the plane were using the wrong direction vectors, meaning that all the points and plane except for the final one were meaningless.
-- I found this by adding a `--max-steps=N` param that visualizes the first $N$ steps only, and saw this nonsensical plot that the training loss was nearly flat across the first 300 points, even though loss was supposedly dropping the most steeply at that point. (see below; the training loss range is tiny)
-- I could have noticed this earlier with better types/dimension analysis.
+- **The training loss near the beginning of the curve should not have been this flat.** I found this by adding a `--max-steps=N` param that visualizes the first $N$ steps only and saw the training loss range was tiny even though I knew loss was supposedly dropping the most steeply at that point. (see image below).
+- I could have noticed this earlier with better types/dimension analysis, I think, since I would know that I was passing in a 1D vector instead of a `list[Tensor]`...
 
 ![](img/2026-10-15-buggy-loss-contour-first-300.png)
 
