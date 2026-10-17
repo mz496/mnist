@@ -174,11 +174,11 @@ https://github.com/user-attachments/assets/19494f15-5fda-49ee-abb2-62ea39151af2
 
 I found decent empirical evidence for the hypothesis that the bad initialization was indeed a cause of the initial training plateau.
 
-images represented by [0,255] arrays -> [0,1] arrays -> not normalizing inputs, vs normalizing to mean 0, std 1) was indeed a cause of the plateau.
+i.e. when preprocessing the input data, the images represented by [0,255] arrays -> [0,1] arrays -> {not normalizing inputs, vs normalizing to mean 0, std 1} does make a difference.
 
 Process:
 - As a baseline, I did not normalize the data, swept across 8 seeds, and noted the training loss dropoff was around step 100-300.
-- Then I swept across those same 8 seeds while normalizing and noted a training loss dropoff was in a much tighter range around step 50-100.
+- Then I swept across those same 8 seeds while normalizing and noted the training loss dropoff was in a much tighter range around step 50-100.
 
 | Un-normalized inputs | Normalized inputs |
 | --- | --- |
