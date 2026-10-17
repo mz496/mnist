@@ -1,11 +1,11 @@
 # MNIST handwritten digit reimplementation
 
 What is this? (tl;dr)
-- I implemented LeNet5 [(LeCun et al, 1998)](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf) by hand in PyTorch to solve the handwritten digit classification task on the MNIST dataset.
-- While poring over the meaning of each line in a modern implementation, I found a data normalization step that I could experiment with including/excluding.
-- I noticed an initial plateau in the loss curve which might have been related.
-- To see if I could gain intuition, I took a detour through [Visualizing the Loss Landscape of Neural Nets (Li et al, 2018)](https://arxiv.org/html/1712.09913) whose filter-normalized direction vector technique allows for effective visualization of a network's loss function.
-  - I extended it to produce an animation of the loss at multiple points during training, but did not find it very useful for the actual plateau question.
+- I implement LeNet5 [(LeCun et al, 1998)](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf) by hand in PyTorch to solve the handwritten digit classification task on the MNIST dataset.
+- While poring over the meaning of each line in a modern implementation, I find a data normalization step that I could experiment with including/excluding.
+- I notice an initial plateau in the training loss curve which I suspect is related.
+- To see if I can gain intuition before trying to solve the problem, I take a detour through implementing [Visualizing the Loss Landscape of Neural Nets (Li et al, 2018)](https://arxiv.org/html/1712.09913) whose filter-normalized direction vector technique allows for effective visualization of a network's loss function.
+  - I extend it to produce an animation of the loss at multiple points during training, but did not find it very useful for the actual plateau question, probably due to the lossiness of the representation.
 - I empirically verify that the simple initialization fix does indeed contribute to faster training by gathering several seeds as a baseline and then comparing baseline improperly-initialized training with properly-initialized training on those same seeds.
 
 
