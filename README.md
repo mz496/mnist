@@ -21,7 +21,7 @@ Things I remain inspired by but have left out of scope for now:
 
 ## Usage
 
-The main entrypoints are documented in the `justfile`.
+The main entrypoints are documented in the [justfile](justfile).
 
 ## Lab notebook
 
@@ -165,7 +165,7 @@ By first $N$ steps. Recall that most of the movement happens before step 600:
 
 I decided to animate along the training path now to see whether I could find anything - I didn't, but at least I got pretty videos out.
 
-Here I am freezing the axes and scales:
+Here I am freezing the axes to the final snapshot's axes and the scales to the overall loss scales, and taking parallel planes to the final snapshot plane through each snapshot point. See [animate.py](src/mnist/loss_landscape/animate/animate.py) for more details.
 
 <!-- 2026-10-16-video_...mp4 -->
 https://github.com/user-attachments/assets/19494f15-5fda-49ee-abb2-62ea39151af2
