@@ -8,8 +8,6 @@ What is this? (tl;dr)
   - I extend it to produce an animation of the loss at multiple points during training, but did not find it very useful for the actual plateau question, probably due to the lossiness of the representation.
 - I empirically verify that the simple initialization fix does indeed contribute to faster training by gathering several seeds as a baseline and then comparing baseline improperly-initialized training with properly-initialized training on those same seeds.
 
-
-
 Goals:
 - Build understanding and intuition of a problem
 - Learn how to use modern tooling
@@ -21,7 +19,11 @@ Things I remain inspired by, but left out of scope for now:
 
 ---
 
-## Raw log
+## Usage
+
+The main entrypoints are documented in the `justfile`.
+
+## Lab notebook
 
 ### Oct 7
 
@@ -207,6 +209,6 @@ Some learnings on learning with AI:
   - This meant I let myself fall into mistakes just so I could realize directly why they were wrong.
 - I also used Sonnet 5.5 for everything, which was surprisingly effective after using Opus 5.5 day-to-day previously. Relative to Opus, I think the most notable things were:
   - it would fail to forget things that I told it to forget, e.g. I've already dropped this variable name from the plan, please stop referencing it
-  - I would have to actively question its line of thinking if it agreed with me too much, which might have been a property of how self-contained and well-known this task is, but I think I preferred questioning wrong output tokens sooner
+  - I would have to actively question its line of thinking if it agreed with me too much; I think I preferred questioning fewer wrong output tokens sooner as opposed to leaving a bunch of comments on an overbaked plan
 - Later on, I started to let AI rip a bit more especially when it came to matplotlib and the mechanics of "how do I plot this thing"
 - I also used it extensively for refactoring
