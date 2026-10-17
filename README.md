@@ -122,7 +122,9 @@ The algorithm is:
 
 My first plot came out like this:
 
-![](img/2026-10-15-buggy-loss-contour-full.png)
+| Buggy full-path plot |
+| --- |
+| ![](img/2026-10-15-buggy-loss-contour-full.png) |
 
 A few observations:
 - This does not quite capture that early training dropoff I was hoping for, and that part of the path cuts across the gradient, probably because of earlier movement in some other dimension.
@@ -133,7 +135,9 @@ A few observations:
   - I think it's because most of the points are on that pink-white arc from $(-6,2)$ -ish to the final destination $(0,0)$, so averaged across all ~8000 points, the path *is* mostly a walk down this valley.
 - I am a bit surprised to see that we spend so many steps continuing to walk down this valley; by step ~500 of ~8000 we are already at a loss of less than 0.5. But maybe that's just because I didn't tune learning rate (0.01) or momentum (0.9) at all.
 
-![](img/2026-10-15-loss-at-500.png)
+| We cover most of the loss reduction by step 500 |
+| --- |
+| ![](img/2026-10-15-loss-at-500.png) |
 
 #### Fixing the plot
 
@@ -143,7 +147,9 @@ I found a pretty bad bug on the trajectory codepath where the points and the pla
 - **The training loss near the beginning of the curve should not have been this flat.** I found this by adding a `--max-steps=N` param that visualizes the first $N$ steps only and saw the training loss range was tiny even though I knew loss was supposedly dropping the most steeply at that point. (see image below).
 - I could have noticed this earlier with better types/dimension analysis, I think, since I would know that I was passing in a 1D vector instead of a `list[Tensor]`...
 
-![](img/2026-10-15-buggy-loss-contour-first-300.png)
+| Buggy loss contour on the first 300 steps |
+| --- |
+| ![](img/2026-10-15-buggy-loss-contour-first-300.png) |
 
 After fixing it, the plots look more sane, although the training loss values are not absolute and are still relative to the plane. Still working on the implications of this, but it's much closer to the true losses anyway - the first point should always be fixed at $\ln(10)\approx 2.3$.
 
