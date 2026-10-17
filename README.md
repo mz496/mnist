@@ -13,7 +13,7 @@ Goals:
 - Learn how to use modern tooling
 - Build the skill of asking interesting questions and answering them
 
-Things I remain inspired by, but left out of scope for now:
+Things I remain inspired by but have left out of scope for now:
 - Visualizations of the network's filters and what features they learn: [Yann LeCun's site, 1998](http://yann.lecun.com/exdb/lenet/)
 - Visualizing the MNIST dataset itself via dimensionality reduction: [Chris Olah's blog, 2014](https://colah.github.io/posts/2014-10-Visualizing-MNIST/)
 
