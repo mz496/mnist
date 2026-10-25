@@ -23,15 +23,14 @@ def make_stats_hook(name: str, stats: dict[str, torch.Tensor]):
     Does not move any values across devices.
     Only records in train mode.
     """
+    @torch.no_grad()
     def hook(module: Module, inputs: tuple[torch.Tensor, ...], output: torch.Tensor) -> None:
         if not module.training:
             return
-        with torch.no_grad():
-            out = output.detach()
-            stats[f"activations/{name}/mean"] = out.mean()
-            stats[f"activations/{name}/std"] = out.std()
-            if isinstance(module, torch.nn.ReLU):
-                stats[f"activations/{name}/frac_zero"] = (out == 0).float().mean()
+        stats[f"activations/{name}/mean"] = output.mean()
+        stats[f"activations/{name}/std"] = output.std()
+        if isinstance(module, torch.nn.ReLU):
+            stats[f"activations/{name}/frac_zero"] = (output == 0).float().mean()
     return hook
 
 def train(
