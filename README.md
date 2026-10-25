@@ -200,9 +200,32 @@ https://github.com/user-attachments/assets/8b41431a-5519-4ef2-85aa-158f64547616
 
 ### Oct 23
 
-I watched makemore part 3 on initialization where Karpathy uses an intentionally bad (i.e. nonlinearity-saturating) initialization that results in slow convergence and fixes it: https://www.youtube.com/watch?v=P6sfmUTpUmc
+I watched a Karpathy video where he uses an intentionally bad (i.e. nonlinearity-saturating) initialization that results in an extremely bad initial loss, diagnoses the issue by digging into the activations and initializations, and fixes it: https://www.youtube.com/watch?v=P6sfmUTpUmc
 
-Here our initial loss of $\ln(10)\approx 2.3$ was reasonable, but I was curious about the 
+Here our initial loss of $\ln(10)\approx 2.3$ was reasonable, but I was curious about his note around seeing the phenomenon of easy initial gains. I wondered what that would look like here and whether I could replicate this intuition by simply printing out the activations to each layer of the network using PyTorch hooks.
+
+Observations:
+
+Without the data normalizing step, the only movement in the distribution is the ReLUs' fraction of zero activations until we hit that "cliff" where the entire network catches on.
+- I wonder whether a different nonlinearity would change that?
+- I wonder why that stair-stepping behavior happens? Seems systematically jumping from one state to another.
+
+![](img/2026-10-25-without-init-norm-relus.png)
+
+The data normalizing basically just accelerates the "cliff" on ReLU. Here is 860 training steps on both (just an arbitrary number):
+
+| Un-normalized inputs, ReLU | Normalized inputs, ReLU |
+| --- | --- |
+| ![](img/2026-10-25-without-init-norm.png) | ![](img/2026-10-25-with-init-norm.png) |
+
+On un-normalized input and varying the nonlinearity, we don't get this "cliff" when using tanh as the original LeNet paper used for the nonlinearity. Logging percentage saturated and the gradient mean, the training _seems_ better with tanh. But this is with the same fixed learning rate as well (0.01), so it could have other explanations:
+
+| Un-normalized inputs, ReLU | Un-normalized inputs, Tanh |
+| --- | --- |
+| ![](img/2026-10-25-train-loss-relu.png) | ![](img/2026-10-25-train-loss-tanh.png) | 
+
+- What is contributing to the stairstepping behavior?
+
 
 ---
 

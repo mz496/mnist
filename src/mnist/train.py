@@ -31,6 +31,9 @@ def make_stats_hook(name: str, stats: dict[str, torch.Tensor]):
         stats[f"activations_{name}/std"] = output.std()
         if isinstance(module, torch.nn.ReLU):
             stats[f"activations_{name}/frac_zero"] = (output == 0).float().mean()
+        if isinstance(module, torch.nn.Tanh):
+            stats[f"activations_{name}/frac_saturated"] = (output.abs() > 0.95).float().mean()
+            stats[f"activations_{name}/tanh_grad_mean"] = (1 - output**2).float().mean()
     return hook
 
 def train(
@@ -149,6 +152,9 @@ def train(
             if save_snapshots and step_number % SNAPSHOT_SPACING == 0:
                 # parameters_to_vector takes a copy, then we detach it from the autograd graph, then move it to the CPU
                 training_snapshot_vectors.append(torch.nn.utils.parameters_to_vector(model.parameters()).detach().cpu())
+
+            if step_number == 5000:
+                raise Exception("Stopping")
         
         # Log validation loss once per epoch
         validation_loss, validation_accuracy = evaluate(model, data.validation, device)
