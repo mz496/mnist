@@ -27,10 +27,10 @@ def make_stats_hook(name: str, stats: dict[str, torch.Tensor]):
     def hook(module: Module, inputs: tuple[torch.Tensor, ...], output: torch.Tensor) -> None:
         if not module.training:
             return
-        stats[f"activations/{name}/mean"] = output.mean()
-        stats[f"activations/{name}/std"] = output.std()
+        stats[f"activations_{name}/mean"] = output.mean()
+        stats[f"activations_{name}/std"] = output.std()
         if isinstance(module, torch.nn.ReLU):
-            stats[f"activations/{name}/frac_zero"] = (output == 0).float().mean()
+            stats[f"activations_{name}/frac_zero"] = (output == 0).float().mean()
     return hook
 
 def train(
@@ -86,7 +86,7 @@ def train(
     wandb.define_metric("train/loss", step_metric="step_number")
     wandb.define_metric("validation/loss", step_metric="step_number")
     wandb.define_metric("validation/accuracy", step_metric="step_number")
-    wandb.define_metric("activations/*", step_metric="step_number")
+    wandb.define_metric("activations_*", step_metric="step_number")
 
     data = get_dataloaders(config.data)
 
