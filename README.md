@@ -198,6 +198,12 @@ Process:
 <!-- 2026-10-16-video-slow-train_...mp4 -->
 https://github.com/user-attachments/assets/8b41431a-5519-4ef2-85aa-158f64547616
 
+### Oct 23
+
+I watched makemore part 3 on initialization where Karpathy uses an intentionally bad (i.e. nonlinearity-saturating) initialization that results in slow convergence and fixes it: https://www.youtube.com/watch?v=P6sfmUTpUmc
+
+Here our initial loss of $\ln(10)\approx 2.3$ was reasonable, but I was curious about the 
+
 ---
 
 ## Things I learned

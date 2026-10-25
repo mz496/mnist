@@ -46,6 +46,7 @@ def get_dataloaders(data_config: DataConfig) -> Dataloaders:
     test_arrow_dataset: ArrowDataset = ds["test"]
 
     # Treat the HF Arrow-backed datasets directly as Torch's dataset type
+    # Shuffle the train set so we get random draws, but not the validation or test (for reproducibility).
     train_loader = DataLoader(cast(TorchDataset[InputDatasetItem], train_arrow_dataset), batch_size=data_config.batch_size, shuffle=True, collate_fn=collate)
     validation_loader = DataLoader(cast(TorchDataset[InputDatasetItem], validation_arrow_dataset), batch_size=data_config.batch_size, shuffle=False, collate_fn=collate)
     test_loader = DataLoader(cast(TorchDataset[InputDatasetItem], test_arrow_dataset), batch_size=data_config.batch_size, shuffle=False, collate_fn=collate)
