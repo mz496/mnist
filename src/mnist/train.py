@@ -29,8 +29,19 @@ def make_stats_hook(name: str, stats: dict[str, torch.Tensor]):
             return
         stats[f"activations_{name}/mean"] = output.mean()
         stats[f"activations_{name}/std"] = output.std()
+        # Inspect the biases on convs, mostly conv1, since this is sensitive to the background pixels in the raw input
+        if isinstance(module, torch.nn.Conv2d):
+            bias_sign = torch.sign(module.bias)
+            for channel in range(bias_sign.numel()):
+                stats[f"activations_{name}/bias_sign_ch{channel}"] = bias_sign[channel]
         if isinstance(module, torch.nn.ReLU):
-            stats[f"activations_{name}/frac_zero"] = (output == 0).float().mean()
+            stats[f"activations_{name}/frac_zero_mean"] = (output == 0).float().mean()
+            # Only look at relus downstream of the convolutions: N, C, H, W.
+            if output.dim() == 4:
+                zeros = (output == 0).float()
+                mean_by_channel = zeros.mean(dim=[0, 2, 3]) # [C]
+                for channel in range(mean_by_channel.numel()):
+                    stats[f"activations_{name}/frac_zero_ch{channel}"] = mean_by_channel[channel]
         if isinstance(module, torch.nn.Tanh):
             stats[f"activations_{name}/frac_saturated"] = (output.abs() > 0.95).float().mean()
             stats[f"activations_{name}/tanh_grad_mean"] = (1 - output**2).float().mean()
@@ -142,6 +153,7 @@ def train(
                 # One GPU->CPU sync for all the activation stats together
                 stat_cpu = stat_values_tensor.cpu()
                 stat_values: list[torch.Tensor] = stat_cpu.tolist()
+                print(model.conv1.bias)
 
                 wandb.log({
                     "train/loss": train_loss_value,
