@@ -18,7 +18,9 @@ from mnist.monitoring.transfer import to_cpu_numpy
 def _views(model: LeNet5) -> list[FeatureMapView]:
     return [
         FeatureMapView("conv1", "preact", model.conv1, input_from=model.conv1, diverging=True),
+        FeatureMapView("conv1", "relu", model.relu1, input_from=model.conv1, diverging=False),
         FeatureMapView("conv2", "preact", model.conv2, input_from=model.conv2, diverging=True, scale=5),
+        FeatureMapView("conv2", "relu", model.relu2, input_from=model.conv2, diverging=False, scale=5),
     ]
 
 
@@ -121,8 +123,8 @@ def test_log_names_the_layer_when_something_it_needs_was_not_collected():
     with pytest.raises(ValueError, match="conv2.*input"):
         log_layer_views(without_input, [LayerViewSpec("conv2", "preact")], views, ["0", "1"], 10)
 
-    with pytest.raises(ValueError, match="conv2.*no feature map view named relu"):
-        log_layer_views(host, [LayerViewSpec("conv2", "relu")], views, ["0", "1"], 10)
+    with pytest.raises(ValueError, match="conv2.*no feature map view named postnorm"):
+        log_layer_views(host, [LayerViewSpec("conv2", "postnorm")], views, ["0", "1"], 10)
 
 
 def test_log_ignores_entries_that_belong_to_other_monitors():
@@ -136,3 +138,34 @@ def test_log_ignores_entries_that_belong_to_other_monitors():
 
 def test_the_metric_glob_matches_only_layer_view_keys():
     assert METRIC_GLOB == "layer_view_*"
+
+
+def test_a_layer_can_have_a_combined_image_for_each_of_its_views():
+    torch.manual_seed(0)
+    model = LeNet5()
+    host = _host(model, torch.randn(3, 1, 28, 28))
+    specs = [
+        LayerViewSpec("conv1", "preact"),
+        LayerViewSpec("conv1", "relu"),
+        LayerViewSpec("conv2", "preact"),
+        LayerViewSpec("conv2", "relu"),
+    ]
+    logged = log_layer_views(host, specs, _views(model), ["0", "1", "2"], step_number=10)
+    assert set(logged) == {
+        "layer_view_conv1/preact",
+        "layer_view_conv1/relu",
+        "layer_view_conv2/preact",
+        "layer_view_conv2/relu",
+    }
+
+
+def test_a_post_relu_view_is_drawn_on_the_sequential_colormap_under_the_same_weights():
+    weights, inputs, maps = _arrays()
+    nonnegative = np.abs(maps)
+    preact = layer_view_image(weights, inputs, maps, True, ["a", "b"], 0.5, scale=3)
+    relu = layer_view_image(weights, inputs, nonnegative, False, ["a", "b"], 0.5, scale=3)
+    assert preact.shape == relu.shape
+    weights_height = filters_to_image(weights, 0.5, gap=2, cell_width=12).shape[0]
+    # The weights band is the same in both, and the maps band is not
+    assert (preact[:weights_height] == relu[:weights_height]).all()
+    assert not (preact[weights_height:] == relu[weights_height:]).all()

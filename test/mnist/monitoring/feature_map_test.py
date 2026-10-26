@@ -88,10 +88,14 @@ def test_image_is_the_input_tiles_then_each_map_in_one_row():
     # 1 input tile, a section gap, then 6 map tiles, each 28 * 4 pixels, with 5 ordinary gaps between maps
     assert image.shape == (28 * 4, 28 * 4 + 8 + 6 * 28 * 4 + 5 * 2, 3)
     assert image.dtype == np.uint8
-    # The input is grayscale: equal R, G, B
+    # The input is drawn on viridis from its min to its max, so its lowest and highest values get the two end colors
     input_tile = image[:, : 28 * 4]
-    assert (input_tile[..., 0] == input_tile[..., 1]).all()
-    assert (input_tile[..., 1] == input_tile[..., 2]).all()
+    low = (np.asarray(colormaps["viridis"](0.0))[:3] * 255).round().astype(np.uint8)
+    high = (np.asarray(colormaps["viridis"](1.0))[:3] * 255).round().astype(np.uint8)
+    assert (input_tile == low).all(axis=-1).any()
+    assert (input_tile == high).all(axis=-1).any()
+    # And it is not grayscale
+    assert not (input_tile[..., 0] == input_tile[..., 1]).all()
 
 
 def test_both_sides_use_one_scale_and_every_column_is_as_wide_as_the_wider_tile():

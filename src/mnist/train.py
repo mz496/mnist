@@ -93,7 +93,13 @@ def train(
     ]
     # The combined images: each layer's weights drawn above one of its feature map views, with the output channels lined up.
     # Each layer must be in both the filter layers and the feature map views above.
-    layer_view_specs = [LayerViewSpec("conv1", "preact"), LayerViewSpec("conv2", "preact")]
+    # There is one image per spec, so a layer with a pre-ReLU and a post-ReLU spec gets two images.
+    layer_view_specs = [
+        LayerViewSpec("conv1", "preact"),
+        LayerViewSpec("conv1", "relu"),
+        LayerViewSpec("conv2", "preact"),
+        LayerViewSpec("conv2", "relu"),
+    ]
 
     # Activation monitoring: each monitor's hooks overwrite their entries every forward pass.
     activation_stats, stats_handles = register_activation_summary_stats(stats_layers)

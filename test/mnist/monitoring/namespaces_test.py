@@ -49,7 +49,12 @@ def _logged_keys_by_monitor() -> dict[str, set[str]]:
         "layer_view": set(
             log_layer_views(
                 host,
-                [LayerViewSpec("conv1", "preact"), LayerViewSpec("conv2", "preact")],
+                [
+                    LayerViewSpec("conv1", "preact"),
+                    LayerViewSpec("conv1", "relu"),
+                    LayerViewSpec("conv2", "preact"),
+                    LayerViewSpec("conv2", "relu"),
+                ],
                 views,
                 [str(index) for index in range(10)],
                 step_number=10,

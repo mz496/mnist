@@ -121,7 +121,7 @@ def feature_maps_to_image(
     differ in height, the shorter side is centered vertically on white.
     Each channel is normalized on its own, so a high-scale channel does not wash out the others.
 
-    The inputs are drawn in grayscale from each channel's min to its max.
+    The inputs are drawn on the same sequential colormap as non-negative maps, from each channel's min to its max.
     scale: each input value and each map value is drawn as a scale x scale block of pixels.
     gap: white pixels between tiles on one side. section_gap: white pixels between the input side and the maps side.
     diverging: if True the maps are drawn red for positive, blue for negative and white for zero, scaled by the channel's
@@ -132,7 +132,7 @@ def feature_maps_to_image(
     input_high = inputs.max(axis=(1, 2), keepdims=True)
     input_unit = np.asarray((inputs - input_low) / np.maximum(input_high - input_low, 1e-12), dtype=np.float32)
     cell_width = max(inputs.shape[2], maps.shape[2]) * scale
-    inputs_part = tile_row(to_uint8_rgb(colormaps["gray"](input_unit)), scale, gap, cell_width)
+    inputs_part = tile_row(to_uint8_rgb(colormaps["viridis"](input_unit)), scale, gap, cell_width)
 
     if diverging:
         limit = np.maximum(np.abs(maps).max(axis=(1, 2), keepdims=True), 1e-12)  # [C, 1, 1]
