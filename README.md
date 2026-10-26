@@ -251,7 +251,10 @@ On these particular runs, which are identical except for seeds, it's hard to say
   - In layer 2, 2-3 neurons appear dead on arrival and never recover (and not only on these example digits, since the weights never update from their initial noise either)
 
 <!-- img/2026-10-26-run-20261026_132305-uc1v7ak0-out.mp4 -->
+https://github.com/user-attachments/assets/51a79580-f057-46b2-8d54-ccce01663bb9
+
 <!-- img/2026-10-26-run-20261026_133631-yx62rdb8-out.mp4 -->
+https://github.com/user-attachments/assets/c51da5b0-19f6-475d-a316-450d4496a0fb
 
 ---
 
