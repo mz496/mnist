@@ -243,9 +243,6 @@ def train(
             if save_snapshots and step_number % SNAPSHOT_SPACING == 0:
                 # parameters_to_vector takes a copy, then we detach it from the autograd graph, then move it to the CPU
                 training_snapshot_vectors.append(torch.nn.utils.parameters_to_vector(model.parameters()).detach().cpu())
-
-            if step_number == 5000:
-                raise Exception("Stopping")
         
         # Log validation loss once per epoch
         validation_loss, validation_accuracy = evaluate(model, data.validation, device)
