@@ -26,7 +26,7 @@ def channel_histograms(layer_name: str, output: np.ndarray) -> dict[str, wandb.H
     The bin range is each channel's own min/max at that step, so bin edges differ between steps.
     """
     return {
-        f"activations_{layer_name}/preact_hist_ch{channel}": wandb.Histogram(
+        f"activations_{layer_name}_preact_hist/ch{channel}": wandb.Histogram(
             np_histogram=np.histogram(output[:, channel], bins=HISTOGRAM_BINS)
         )
         for channel in range(output.shape[1])
@@ -45,11 +45,6 @@ def make_stats_hook(name: str, stats: dict[str, torch.Tensor]):
             return
         stats[f"activations_{name}/mean"] = output.mean()
         stats[f"activations_{name}/std"] = output.std()
-        # Inspect the biases on convs, mostly conv1, since this is sensitive to the background pixels in the raw input
-        if isinstance(module, torch.nn.Conv2d):
-            bias_sign = torch.sign(module.bias)
-            for channel in range(bias_sign.numel()):
-                stats[f"activations_{name}/bias_sign_ch{channel}"] = bias_sign[channel]
         if isinstance(module, torch.nn.ReLU):
             stats[f"activations_{name}/frac_zero_mean"] = (output == 0).float().mean()
             # Only look at relus downstream of the convolutions: N, C, H, W.

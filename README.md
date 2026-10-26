@@ -206,11 +206,9 @@ Here our initial loss of $\ln(10)\approx 2.3$ was reasonable, but I was curious 
 
 Observations:
 
-Without the data normalizing step, the only movement in the distribution is the ReLUs' fraction of zero activations until we hit that "cliff" where the entire network catches on.
-- I wonder whether a different nonlinearity would change that?
-- I wonder why that stair-stepping behavior happens? Seems systematically jumping from one state to another.
-
-![](img/2026-10-25-without-init-norm-relus.png)
+Without the data normalizing step, the only movement in the distribution is the ReLUs' fraction of zero activations until we hit that "cliff" where the entire network catches on (see the first image below, top right 2 graphs).
+- Would a different nonlinearity would change that? Tanh does not appear to exhibit this behavior (see below).
+- That stair-stepping behavior in frac_zero: I believe this is the bias flickering in and out of consideration here as the first convolution right before it is looking at the input image directly, which is mostly background, hence giving the weights a 0 multiplier.
 
 The data normalizing basically just accelerates the "cliff" on ReLU. Here is 860 training steps on both (just an arbitrary number):
 
@@ -218,13 +216,21 @@ The data normalizing basically just accelerates the "cliff" on ReLU. Here is 860
 | --- | --- |
 | ![](img/2026-10-25-without-init-norm.png) | ![](img/2026-10-25-with-init-norm.png) |
 
-On un-normalized input and varying the nonlinearity, we don't get this "cliff" when using tanh as the original LeNet paper used for the nonlinearity. Logging percentage saturated and the gradient mean, the training _seems_ better with tanh. But this is with the same fixed learning rate as well (0.01), so it could have other explanations:
+Keeping the un-normalized input fixed and varying the nonlinearity, the cliff is maybe smaller? This is with a fixed learning rate 0.01. Looking back at the other plot where I did a few seeds, I should have tried this with a seed sweep on tanh as well:
 
 | Un-normalized inputs, ReLU | Un-normalized inputs, Tanh |
 | --- | --- |
 | ![](img/2026-10-25-train-loss-relu.png) | ![](img/2026-10-25-train-loss-tanh.png) | 
 
-- What is contributing to the stairstepping behavior?
+#### What about the training loss cliff?
+
+I didn't find a satisfying explanation for what contributes to that loss cliff except "we must be doing something right" - I also imagine this is years of ML development packed into PyTorch itself as well (momentum, proper initialization such as Kaiming, etc). I did find W&B's histogram libraries and plotted the per-channel weights.
+
+On the second convolution layer, I see a significantly higher dispersion in weights signaling that the second layer seems to be doing meaningful things (?) post-cliff, as expected. These are both on normalized inputs, ReLU:
+
+| Convolution 1 (6 filters, 5x5) | Convolution 2 (some of the 16 filters, 5x5 each) |
+| --- | --- |
+| ![](img/2026-10-25-conv1-preact.png) | ![](img/2026-10-25-conv2-preact.png) | 
 
 
 ---
