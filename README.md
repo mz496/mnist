@@ -245,7 +245,7 @@ I went a bit further than just summary stats on the convolution outputs and ReLU
 This is a video showing the layers over time, the first layer's post-ReLU outputs on the left (1 input channel -> 6 channels) and the second layer's post-ReLU outputs on the right (6 channels -> 16 channels).
 
 On these particular runs, which are identical except for seeds, it's hard to say what each neuron is "learning," but some observations:
-- The neurons that activate the most by logging step 10 (training step 100) are the ones that also end up behaving the best and not "dying" by the end of training. This screenshot is at the top of the doc.
+- The neurons that activate the most by the "cliff" where training starts to accelerate (logging step ~10; training step ~100) are the ones that also end up behaving the best and not "dying" by the end of training. The screenshot at the top of the doc shows this.
 - Looking at the weights in layer 2's grid for rows/columns that never update:
   - In layer 1, neuron 3 (in both) appears to be misbehaving as in not actually transmitting anything onward
   - In layer 2, 2-3 neurons appear dead on arrival and never recover (and not only on these example digits, since the weights never update from their initial noise either)
