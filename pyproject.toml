@@ -9,6 +9,7 @@ dependencies = [
     "matplotlib>=3.11.2",
     "numpy>=2.5.3",
     "pandas-stubs>=3.0.5.260914",
+    "pillow>=12.3.0",
     "pydantic>=2.13.5",
     "pyyaml>=6.0.3",
     "torch>=2.14.1",

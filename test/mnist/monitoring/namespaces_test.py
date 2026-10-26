@@ -19,10 +19,12 @@ def _logged_keys_by_monitor() -> dict[str, set[str]]:
     }
     stats, _ = activation_summary_stats.register_activation_summary_stats(stats_layers)
     stash, _ = activation_histogram.register_activation_histograms({"conv1": model.conv1, "conv2": model.conv2})
-    filter_layers = {"conv1": model.conv1}
+    filter_layers = {"conv1": model.conv1, "conv2": model.conv2}
     views = [
-        FeatureMapView("conv1", "preact", model.conv1, diverging=True),
-        FeatureMapView("conv1", "relu", model.relu1, diverging=False),
+        FeatureMapView("conv1", "preact", model.conv1, input_from=model.conv1, diverging=True),
+        FeatureMapView("conv1", "relu", model.relu1, input_from=model.conv1, diverging=False),
+        FeatureMapView("conv2", "preact", model.conv2, input_from=model.conv2, diverging=True, scale=6),
+        FeatureMapView("conv2", "relu", model.relu2, input_from=model.conv2, diverging=False, scale=6),
     ]
     initial = to_cpu_numpy(filter_image.collect_filter_weights(filter_layers))
 
@@ -42,7 +44,7 @@ def _logged_keys_by_monitor() -> dict[str, set[str]]:
         "stats": set(activation_summary_stats.log_activation_summary_stats(stat_names, host)),
         "histograms": set(activation_histogram.log_activation_histograms(host)),
         "filters": set(filter_image.log_filter_images(host, initial, step_number=10)),
-        "maps": set(log_feature_maps(host, views, images[:, 0].numpy(), digits="0", step_number=10)),
+        "maps": set(log_feature_maps(host, views, labels=[str(index) for index in range(10)], step_number=10)),
     }
 
 
@@ -76,4 +78,5 @@ def test_the_namespaces_are_the_documented_ones():
 def test_keys_put_the_layer_in_the_section_before_the_first_slash():
     keys = _logged_keys_by_monitor()
     assert {key.split("/")[0] for key in keys["histograms"]} == {"activation_preact_conv1", "activation_preact_conv2"}
-    assert {key.split("/")[0] for key in keys["maps"]} == {"maps_conv1"}
+    assert {key.split("/")[0] for key in keys["maps"]} == {"maps_conv1", "maps_conv2"}
+    assert {key.split("/")[0] for key in keys["filters"]} == {"weights_conv1", "weights_conv2"}

@@ -77,10 +77,18 @@ def train(
         "fc3": model.fc3,
     }
     histogram_layers: dict[str, Module] = {"conv1": model.conv1, "conv2": model.conv2}
-    filter_layers = {"conv1": model.conv1}
+    filter_layers = {"conv1": model.conv1, "conv2": model.conv2}
+    # The fixed color limit for the filter images. The default init shrinks with the number of inputs
+    # (conv1 starts within +-0.2, conv2 within +-0.08), so conv2 gets a smaller limit. The conv2 value is a first guess.
+    filter_vmax_by_layer = {"conv1": 1.0, "conv2": 0.5}
+    # The left of each row is the input to the layer's convolution: the digit for conv1, and conv1's pooled output
+    # for conv2. Both sides of a row use the same scale, so conv2's 14 by 14 input is taller than its 10 by 10 maps
+    # and the maps are centered on white.
     feature_map_views = [
-        FeatureMapView("conv1", "preact", model.conv1, diverging=True),
-        FeatureMapView("conv1", "relu", model.relu1, diverging=False),
+        FeatureMapView("conv1", "preact", model.conv1, input_from=model.conv1, diverging=True),
+        FeatureMapView("conv1", "relu", model.relu1, input_from=model.conv1, diverging=False),
+        FeatureMapView("conv2", "preact", model.conv2, input_from=model.conv2, diverging=True, scale=5),
+        FeatureMapView("conv2", "relu", model.relu2, input_from=model.conv2, diverging=False, scale=5),
     ]
 
     # Activation monitoring: each monitor's hooks overwrite their entries every forward pass.
@@ -117,8 +125,7 @@ def train(
     # so the feature maps only change because the model does. Rows are in digit order.
     probe_cpu_images, probe_labels = first_example_per_class(data.validation)  # [10, 1, 28, 28], [10]
     probe_images = probe_cpu_images.to(device)
-    probe_originals = probe_cpu_images[:, 0].numpy()  # [10, 28, 28]
-    probe_digits = " ".join(str(label) for label in probe_labels.tolist())
+    probe_label_names = [str(int(label)) for label in probe_labels]
 
     epoch_count = config.train.epoch_count
     step_number = 0
@@ -177,8 +184,8 @@ def train(
                     "train/loss": train_loss_value,
                     **log_activation_summary_stats(stat_names, host),
                     **log_activation_histograms(host),
-                    **log_filter_images(host, initial_filter_weights, step_number),
-                    **log_feature_maps(host, feature_map_views, probe_originals, probe_digits, step_number),
+                    **log_filter_images(host, initial_filter_weights, step_number, filter_vmax_by_layer),
+                    **log_feature_maps(host, feature_map_views, probe_label_names, step_number),
                     "step_number": step_number,
                 })
 
