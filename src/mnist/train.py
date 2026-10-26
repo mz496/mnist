@@ -7,6 +7,7 @@ import wandb
 from mnist.config import Config, load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
+from mnist.filter_image import FILTER_VMAX, filters_to_image
 from mnist.type_aliases import CrossEntropyLossFunction
 from mnist.utils import set_seed, get_device, timestamp
 from mnist.model import LeNet5
@@ -95,6 +96,8 @@ def train(
     device = get_device()
     print(f"MOVING MODEL TO DEVICE: {device}")
     model = LeNet5().to(device)
+    # conv1's weights at init, to log how far training has moved each filter. Copied so later updates don't change it.
+    conv1_initial_weights = model.conv1.weight.detach().cpu().numpy().copy()
     parameter_count = sum(p.numel() for p in model.parameters())
     print(f"PARAMETER COUNT CHECK: {parameter_count}")
 
@@ -130,6 +133,7 @@ def train(
     wandb.define_metric("validation/loss", step_metric="step_number")
     wandb.define_metric("validation/accuracy", step_metric="step_number")
     wandb.define_metric("activations_*", step_metric="step_number")
+    wandb.define_metric("weights_*", step_metric="step_number")
 
     data = get_dataloaders(config.data)
 
@@ -188,11 +192,27 @@ def train(
                 conv1_histograms = channel_histograms("conv1", stashed_outputs["conv1"].cpu().numpy())
                 conv2_histograms = channel_histograms("conv2", stashed_outputs["conv2"].cpu().numpy())
 
+                # conv1's six 5x5 filters as images:
+                # - fixed scale: magnitudes comparable across steps
+                # - normalized: each filter's pattern visible from the start
+                # - change from init (normalized): only what training has added, without the random starting pattern
+                # Read after optimizer.step(), so these are one update newer than the forward pass the activation stats came from.
+                conv1_weights = model.conv1.weight.detach().cpu().numpy()
+                filter_caption = f"step {step_number}"
+                conv1_filter_images = {
+                    "weights_conv1/filters_fixed_scale": wandb.Image(filters_to_image(conv1_weights, FILTER_VMAX), caption=filter_caption),
+                    "weights_conv1/filters_normalized": wandb.Image(filters_to_image(conv1_weights, None), caption=filter_caption),
+                    "weights_conv1/filters_change_from_init": wandb.Image(
+                        filters_to_image(conv1_weights - conv1_initial_weights, None), caption=filter_caption
+                    ),
+                }
+
                 wandb.log({
                     "train/loss": train_loss_value,
                     **dict(zip(stat_names, stat_values)),
                     **conv1_histograms,
                     **conv2_histograms,
+                    **conv1_filter_images,
                     "step_number": step_number,
                 })
 
