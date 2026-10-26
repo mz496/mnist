@@ -7,6 +7,7 @@ import wandb
 from mnist.config import Config, load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
+from mnist.feature_maps import capture_conv1_maps, feature_maps_grid, first_example_per_class
 from mnist.filter_image import FILTER_VMAX, filters_to_image
 from mnist.type_aliases import CrossEntropyLossFunction
 from mnist.utils import set_seed, get_device, timestamp
@@ -134,8 +135,16 @@ def train(
     wandb.define_metric("validation/accuracy", step_metric="step_number")
     wandb.define_metric("activations_*", step_metric="step_number")
     wandb.define_metric("weights_*", step_metric="step_number")
+    wandb.define_metric("maps_*", step_metric="step_number")
 
     data = get_dataloaders(config.data)
+
+    # Fixed probe images: the first validation example of each digit 0-9 (the validation loader is unshuffled),
+    # so the feature maps only change because the model does. Rows are in digit order.
+    probe_cpu_images, probe_labels = first_example_per_class(data.validation)  # [10, 1, 28, 28], [10]
+    probe_images = probe_cpu_images.to(device)
+    probe_originals = probe_cpu_images[:, 0].numpy()  # [10, 28, 28]
+    probe_digits = " ".join(str(label) for label in probe_labels.tolist())
 
     epoch_count = config.train.epoch_count
     step_number = 0
@@ -207,12 +216,27 @@ def train(
                     ),
                 }
 
+                # conv1's feature maps for the probe images, with the current weights: pre-ReLU (signed) and post-ReLU.
+                # One row per image, top to bottom in validation order.
+                # capture_conv1_maps runs in eval mode with temporary hooks, so it doesn't touch the stats or stashed outputs.
+                probe_maps = capture_conv1_maps(model, probe_images)
+                map_caption = f"{filter_caption}; digits {probe_digits}"
+                conv1_map_images = {
+                    "maps_conv1/preact": wandb.Image(
+                        feature_maps_grid(probe_originals, probe_maps["conv1_preact"], diverging=True), caption=map_caption
+                    ),
+                    "maps_conv1/relu": wandb.Image(
+                        feature_maps_grid(probe_originals, probe_maps["conv1_relu"], diverging=False), caption=map_caption
+                    ),
+                }
+
                 wandb.log({
                     "train/loss": train_loss_value,
                     **dict(zip(stat_names, stat_values)),
                     **conv1_histograms,
                     **conv2_histograms,
                     **conv1_filter_images,
+                    **conv1_map_images,
                     "step_number": step_number,
                 })
 

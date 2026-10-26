@@ -5,6 +5,24 @@ from matplotlib import colormaps
 # pale at first, and grow toward this as training takes off. Weights beyond it saturate.
 FILTER_VMAX = 1.0
 
+def to_uint8_rgb(rgba: np.ndarray) -> np.ndarray:
+    """Drops the alpha channel from colormap output (floats in [0, 1]) and converts to uint8 RGB."""
+    return (np.asarray(rgba)[..., :3] * 255).round().astype(np.uint8)
+
+def tile_row(tiles: np.ndarray, scale: int, gap: int) -> np.ndarray:
+    """
+    Lays [T, h, w, 3] uint8 tiles side by side in one row, each upscaled to (h * scale) x (w * scale)
+    by nearest-neighbor, with `gap` white pixels between tiles. Returns uint8 RGB [h * scale, T * w * scale + (T - 1) * gap, 3].
+    """
+    tiles = tiles.repeat(scale, axis=1).repeat(scale, axis=2)
+    spacer = np.full((tiles.shape[1], gap, 3), 255, dtype=np.uint8)
+    row: list[np.ndarray] = []
+    for index, tile in enumerate(tiles):
+        if index > 0:
+            row.append(spacer)
+        row.append(tile)
+    return np.concatenate(row, axis=1)
+
 def filters_to_image(weights: np.ndarray, vmax: float | None, scale: int = 24, gap: int = 2) -> np.ndarray:
     """
     Renders conv filters as one row of upscaled tiles: [F, 1, K, K] weights -> uint8 RGB [H, W, 3].
@@ -24,14 +42,5 @@ def filters_to_image(weights: np.ndarray, vmax: float | None, scale: int = 24, g
         limit = vmax
     # [-limit, limit] -> [0, 1], with zero at the middle of the colormap
     unit = 0.5 + 0.5 * np.clip(filters / limit, -1.0, 1.0)
-    rgba = np.asarray(colormaps["RdBu_r"](unit))  # [F, K, K, 4], floats in [0, 1]
-    rgb = (rgba[..., :3] * 255).round().astype(np.uint8)  # [F, K, K, 3]
-    rgb = rgb.repeat(scale, axis=1).repeat(scale, axis=2)  # [F, K*scale, K*scale, 3]
-
-    spacer = np.full((rgb.shape[1], gap, 3), 255, dtype=np.uint8)
-    tiles: list[np.ndarray] = []
-    for index, tile in enumerate(rgb):
-        if index > 0:
-            tiles.append(spacer)
-        tiles.append(tile)
-    return np.concatenate(tiles, axis=1)
+    rgb = to_uint8_rgb(colormaps["RdBu_r"](unit))  # [F, K, K, 3]
+    return tile_row(rgb, scale, gap)
