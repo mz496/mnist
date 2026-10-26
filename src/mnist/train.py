@@ -17,11 +17,27 @@ from torch.nn import Module
 # which is how loss_landscape/plot/grid_sweep turns a step number into a row count.
 SNAPSHOT_SPACING = 10
 
+# Bins per W&B histogram (default 64, max 512). Fine bins help resolve the thin background spike in conv1.
+HISTOGRAM_BINS = 256
+
+def channel_histograms(layer_name: str, output: np.ndarray) -> dict[str, wandb.Histogram]:
+    """
+    One W&B histogram per channel of a [N, C, H, W] array, over every image and position.
+    The bin range is each channel's own min/max at that step, so bin edges differ between steps.
+    """
+    return {
+        f"activations_{layer_name}/preact_hist_ch{channel}": wandb.Histogram(
+            np_histogram=np.histogram(output[:, channel], bins=HISTOGRAM_BINS)
+        )
+        for channel in range(output.shape[1])
+    }
+
 def make_stats_hook(name: str, stats: dict[str, torch.Tensor]):
     """
     Returns a forward hook that records status into `stats` as a dict of key -> 0D tensor.
-    Does not move any values across devices.
-    Only records in train mode.
+    - Overwrites on every step.
+    - Does not move any values across devices.
+    - Only records in train mode.
     """
     @torch.no_grad()
     def hook(module: Module, inputs: tuple[torch.Tensor, ...], output: torch.Tensor) -> None:
@@ -47,8 +63,22 @@ def make_stats_hook(name: str, stats: dict[str, torch.Tensor]):
             stats[f"activations_{name}/tanh_grad_mean"] = (1 - output**2).float().mean()
     return hook
 
+def make_stash_hook(name: str, stash: dict[str, torch.Tensor]):
+    """
+    Returns a forward hook that stashes the module's entire raw output in `tensors[name]`.
+    - Overwrites on every step.
+    - Used to build histograms at logging time. Stores a reference only: no copy, no device transfer.
+    - Only records in train mode.
+    """
+    def hook(module: Module, inputs: tuple[torch.Tensor, ...], output: torch.Tensor) -> None:
+        if not module.training:
+            return
+        # Detach from the autograd graph when adding to the stash.
+        stash[name] = output.detach()
+    return hook
+
 def train(
-    config: Config, 
+    config: Config,
     group: str | None = None, 
     tag: str | None = None, 
     existing_run: wandb.Run | None = None, 
@@ -75,9 +105,13 @@ def train(
 
     # Activation monitoring: each hook overwrites its entries every forward pass.
     activation_stats: dict[str, torch.Tensor] = {}
+    # Raw layer outputs kept around for per-channel histograms, [N, C, H, W].
+    stashed_outputs: dict[str, torch.Tensor] = {}
     hook_handles = [
+        model.conv1.register_forward_hook(make_stash_hook("conv1", stashed_outputs)),
         model.conv1.register_forward_hook(make_stats_hook("conv1", activation_stats)),
         model.relu1.register_forward_hook(make_stats_hook("relu1", activation_stats)),
+        model.conv2.register_forward_hook(make_stash_hook("conv2", stashed_outputs)),
         model.conv2.register_forward_hook(make_stats_hook("conv2", activation_stats)),
         model.relu2.register_forward_hook(make_stats_hook("relu2", activation_stats)),
         model.fc1.register_forward_hook(make_stats_hook("fc1", activation_stats)),
@@ -153,11 +187,17 @@ def train(
                 # One GPU->CPU sync for all the activation stats together
                 stat_cpu = stat_values_tensor.cpu()
                 stat_values: list[torch.Tensor] = stat_cpu.tolist()
-                print(model.conv1.bias)
+
+                # Per-channel histograms of the convs' preactivations
+                # Move each whole [N, C, H, W] tensor to the CPU once, then slice channels in NumPy.
+                conv1_histograms = channel_histograms("conv1", stashed_outputs["conv1"].cpu().numpy())
+                conv2_histograms = channel_histograms("conv2", stashed_outputs["conv2"].cpu().numpy())
 
                 wandb.log({
                     "train/loss": train_loss_value,
                     **dict(zip(stat_names, stat_values)),
+                    **conv1_histograms,
+                    **conv2_histograms,
                     "step_number": step_number,
                 })
 
