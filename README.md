@@ -1,16 +1,20 @@
-# MNIST handwritten digit reimplementation
+# MNIST handwritten digit identification
 
-What is this? (tl;dr)
+![](img/2026-10-26-layer-view-screenshot.png)
+
+What I did:
 - I implement LeNet5 [(LeCun et al, 1998)](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf) by hand in PyTorch to solve the handwritten digit classification task on the MNIST dataset.
 - While poring over the meaning of each line in a modern implementation, I find a data normalization step that I could experiment with including/excluding.
 - I notice an initial plateau in the training loss curve which I suspect is related.
 - To see if I can gain intuition before trying to solve the problem, I take a detour through implementing [Visualizing the Loss Landscape of Neural Nets (Li et al, 2018)](https://arxiv.org/html/1712.09913) whose filter-normalized direction vector technique allows for effective visualization of a network's loss function.
-  - I extend it to produce an animation of the loss at multiple points during training, but did not find it very useful for the actual plateau question, probably due to the lossiness of the representation.
-- I empirically verify that the simple initialization fix does indeed contribute to faster training by gathering several seeds as a baseline and then comparing baseline improperly-initialized training with properly-initialized training on those same seeds.
+  - I extend it to produce an animation of the loss at multiple points during training.
+  - I did not find it very useful for the actual plateau question, probably due to some gap in my understanding and/or the lossiness of the representation.
+- Back to actual solutions: I empirically verify that the simple initialization fix does indeed contribute to faster training by gathering several seeds as a baseline and then comparing baseline improperly-initialized training with properly-initialized training on those same seeds.
+- I visualize the activations going in/out of the network layers (pictured above) to try to gain intuition on what each layer and channel is learning.
 
 Goals:
-- Build understanding and intuition of a problem
-- Learn how to use modern tooling
+- Build understanding and intuition of a problem and techniques used to solve it
+- Use modern tooling (Hugging Face, Weights and Biases)
 - Build the skill of asking interesting questions and answering them
 
 Things I remain inspired by but have left out of scope for now:
@@ -232,6 +236,22 @@ On the second convolution layer, I see a significantly higher dispersion in weig
 | --- | --- |
 | ![](img/2026-10-25-conv1-preact.png) | ![](img/2026-10-25-conv2-preact.png) | 
 
+### Oct 26
+
+#### Visualizing the filters themselves
+
+I went a bit further than just summary stats on the convolution outputs and ReLU outputs to visualize them across training. I've definitely seen these visualizations on the internet somewhere, but doing these myself was quite illuminating.
+
+This is a video showing the layers over time, the first layer's post-ReLU outputs on the left (1 input channel -> 6 channels) and the second layer's post-ReLU outputs on the right (6 channels -> 16 channels).
+
+On these particular runs, which are identical except for seeds, it's hard to say what each neuron is "learning," but some observations:
+- The neurons that activate the most by logging step 10 (training step 100) are the ones that also end up behaving the best and not "dying" by the end of training. This screenshot is at the top of the doc.
+- Looking at the weights in layer 2's grid for rows/columns that never update:
+  - In layer 1, neuron 3 (in both) appears to be misbehaving as in not actually transmitting anything onward
+  - In layer 2, 2-3 neurons appear dead on arrival and never recover (and not only on these example digits, since the weights never update from their initial noise either)
+
+<!-- img/2026-10-26-run-20261026_132305-uc1v7ak0-out.mp4 -->
+<!-- img/2026-10-26-run-20261026_133631-yx62rdb8-out.mp4 -->
 
 ---
 
