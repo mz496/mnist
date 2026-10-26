@@ -27,6 +27,7 @@ from mnist.monitoring.feature_map import (
     log_feature_maps,
 )
 from mnist.monitoring.filter_image import collect_filter_weights, define_filter_image_metrics, log_filter_images
+from mnist.monitoring.layer_view import LayerViewSpec, define_layer_view_metrics, log_layer_views
 from mnist.monitoring.transfer import to_cpu_numpy
 from mnist.type_aliases import CrossEntropyLossFunction
 from mnist.utils import set_seed, get_device, timestamp
@@ -90,6 +91,9 @@ def train(
         FeatureMapView("conv2", "preact", model.conv2, input_from=model.conv2, diverging=True, scale=5),
         FeatureMapView("conv2", "relu", model.relu2, input_from=model.conv2, diverging=False, scale=5),
     ]
+    # The combined images: each layer's weights drawn above one of its feature map views, with the output channels lined up.
+    # Each layer must be in both the filter layers and the feature map views above.
+    layer_view_specs = [LayerViewSpec("conv1", "preact"), LayerViewSpec("conv2", "preact")]
 
     # Activation monitoring: each monitor's hooks overwrite their entries every forward pass.
     activation_stats, stats_handles = register_activation_summary_stats(stats_layers)
@@ -118,6 +122,7 @@ def train(
     define_activation_histogram_metrics()
     define_filter_image_metrics()
     define_feature_map_metrics()
+    define_layer_view_metrics()
 
     data = get_dataloaders(config.data)
 
@@ -186,6 +191,7 @@ def train(
                     **log_activation_histograms(host),
                     **log_filter_images(host, initial_filter_weights, step_number, filter_vmax_by_layer),
                     **log_feature_maps(host, feature_map_views, probe_label_names, step_number),
+                    **log_layer_views(host, layer_view_specs, feature_map_views, probe_label_names, step_number, filter_vmax_by_layer),
                     "step_number": step_number,
                 })
 

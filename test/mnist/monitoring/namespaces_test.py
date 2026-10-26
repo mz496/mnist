@@ -4,8 +4,9 @@ import numpy as np
 import torch
 
 from mnist.model import LeNet5
-from mnist.monitoring import activation_histogram, activation_summary_stats, feature_map, filter_image
+from mnist.monitoring import activation_histogram, activation_summary_stats, feature_map, filter_image, layer_view
 from mnist.monitoring.feature_map import FeatureMapView, collect_feature_maps, log_feature_maps
+from mnist.monitoring.layer_view import LayerViewSpec, log_layer_views
 from mnist.monitoring.transfer import to_cpu_numpy
 
 
@@ -45,6 +46,15 @@ def _logged_keys_by_monitor() -> dict[str, set[str]]:
         "histograms": set(activation_histogram.log_activation_histograms(host)),
         "filters": set(filter_image.log_filter_images(host, initial, step_number=10)),
         "maps": set(log_feature_maps(host, views, labels=[str(index) for index in range(10)], step_number=10)),
+        "layer_view": set(
+            log_layer_views(
+                host,
+                [LayerViewSpec("conv1", "preact"), LayerViewSpec("conv2", "preact")],
+                views,
+                [str(index) for index in range(10)],
+                step_number=10,
+            )
+        ),
     }
 
 
@@ -54,6 +64,7 @@ def _globs() -> dict[str, str]:
         "histograms": activation_histogram.metric_glob(),
         "filters": filter_image.METRIC_GLOB,
         "maps": feature_map.METRIC_GLOB,
+        "layer_view": layer_view.METRIC_GLOB,
     }
 
 
@@ -73,6 +84,7 @@ def test_the_namespaces_are_the_documented_ones():
     assert all(key.startswith("activation_preact_") for key in keys["histograms"])
     assert all(key.startswith("weights_") for key in keys["filters"])
     assert all(key.startswith("maps_") for key in keys["maps"])
+    assert all(key.startswith("layer_view_") for key in keys["layer_view"])
 
 
 def test_keys_put_the_layer_in_the_section_before_the_first_slash():
@@ -80,3 +92,4 @@ def test_keys_put_the_layer_in_the_section_before_the_first_slash():
     assert {key.split("/")[0] for key in keys["histograms"]} == {"activation_preact_conv1", "activation_preact_conv2"}
     assert {key.split("/")[0] for key in keys["maps"]} == {"maps_conv1", "maps_conv2"}
     assert {key.split("/")[0] for key in keys["filters"]} == {"weights_conv1", "weights_conv2"}
+    assert {key.split("/")[0] for key in keys["layer_view"]} == {"layer_view_conv1", "layer_view_conv2"}

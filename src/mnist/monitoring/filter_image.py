@@ -15,7 +15,9 @@ DEVICE_KEY = "filter_weights"
 # pale at first, and grow toward this as training takes off. Weights beyond it saturate.
 FILTER_VMAX = 1.0
 
-def filters_to_grid(weights: np.ndarray, vmax: float | None, scale: int | None = None, gap: int = 2) -> np.ndarray:
+def filters_to_grid(
+    weights: np.ndarray, vmax: float | None, scale: int | None = None, gap: int = 2, cell_width: int | None = None
+) -> np.ndarray:
     """
     Renders conv filters as upscaled tiles: [F, C_in, K, K] weights -> uint8 RGB [H, W, 3].
     Diverging colormap centered on zero: red is positive, blue is negative, white is zero.
@@ -26,11 +28,14 @@ def filters_to_grid(weights: np.ndarray, vmax: float | None, scale: int | None =
           its pattern but hides its scale.
     scale: each weight is drawn as a scale x scale block of pixels, copied up with nearest-neighbor.
            The default is 24 when there is one input channel and 12 when there are more, which keeps big grids manageable.
+           With a cell width the default is the largest whole number of pixels per weight that fits in the cell.
     gap: white pixels between tiles.
+    cell_width: give every filter a column this many pixels wide, with its tile centered in it on white. None uses the
+                tile's own width. This lets the columns line up with another image. Must be at least a tile wide.
     """
-    input_channels = weights.shape[1]
+    input_channels, kernel_width = weights.shape[1], weights.shape[3]
     if scale is None:
-        scale = 24 if input_channels == 1 else 12
+        scale = max(1, cell_width // kernel_width) if cell_width is not None else (24 if input_channels == 1 else 12)
     if vmax is None:
         limit = np.abs(weights).max(axis=(1, 2, 3), keepdims=True)  # [F, 1, 1, 1]
         # An all-zero filter would divide by zero. Any positive limit renders it as the zero color.
@@ -40,19 +45,23 @@ def filters_to_grid(weights: np.ndarray, vmax: float | None, scale: int | None =
     # [-limit, limit] -> [0, 1], with zero at the middle of the colormap
     unit = 0.5 + 0.5 * np.clip(weights / limit, -1.0, 1.0)
     rgb = to_uint8_rgb(colormaps["RdBu_r"](unit))  # [F, C_in, K, K, 3]
-    return stack_rows([tile_row(rgb[:, channel], scale, gap) for channel in range(input_channels)], gap)
+    return stack_rows([tile_row(rgb[:, channel], scale, gap, cell_width) for channel in range(input_channels)], gap)
 
-def filters_to_image(weights: np.ndarray, vmax: float | None, scale: int | None = None, gap: int = 2) -> np.ndarray:
+def filters_to_image(
+    weights: np.ndarray, vmax: float | None, scale: int | None = None, gap: int = 2, cell_width: int | None = None
+) -> np.ndarray:
     """
     The grid from filters_to_grid with its axes labeled, so the image says what each direction means.
     - Across the top: "output ch" and the kernel height and width, then the index of each filter.
     - Down the left: the index of each input channel, under "in ch".
+    scale, gap and cell_width are as in filters_to_grid.
     """
     filter_count, input_channels, kernel_height, kernel_width = weights.shape
     if scale is None:
-        scale = 24 if input_channels == 1 else 12
-    grid = filters_to_grid(weights, vmax, scale, gap)
-    columns = ColumnGroup(f"output ch, {kernel_height}x{kernel_width}", [str(index) for index in range(filter_count)], kernel_width * scale)
+        scale = max(1, cell_width // kernel_width) if cell_width is not None else (24 if input_channels == 1 else 12)
+    grid = filters_to_grid(weights, vmax, scale, gap, cell_width)
+    column_width = cell_width if cell_width is not None else kernel_width * scale
+    columns = ColumnGroup(f"output ch, {kernel_height}x{kernel_width}", [str(index) for index in range(filter_count)], column_width)
     return add_axis_labels(
         grid, [columns], [str(index) for index in range(input_channels)], "in ch", kernel_height * scale, gap, section_gap=0
     )
