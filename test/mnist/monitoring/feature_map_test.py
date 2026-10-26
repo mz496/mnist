@@ -2,47 +2,64 @@ import numpy as np
 import torch
 from matplotlib import colormaps
 
-from mnist.feature_maps import capture_conv1_maps, feature_maps_grid, feature_maps_to_image, first_example_per_class
 from mnist.model import LeNet5
+from mnist.monitoring.feature_map import (
+    FeatureMapView,
+    collect_feature_maps,
+    feature_maps_grid,
+    feature_maps_to_image,
+    first_example_per_class,
+    log_feature_maps,
+)
+from mnist.monitoring.transfer import to_cpu_numpy
 
 
-def test_capture_returns_conv1_preactivation_and_relu_for_every_image():
+def _conv1_views(model: LeNet5) -> list[FeatureMapView]:
+    return [
+        FeatureMapView("conv1", "preact", model.conv1, diverging=True),
+        FeatureMapView("conv1", "relu", model.relu1, diverging=False),
+    ]
+
+
+def test_collect_returns_each_views_output_for_every_image_on_the_device():
     torch.manual_seed(0)
     model = LeNet5()
     images = torch.randn(10, 1, 28, 28)
-    maps = capture_conv1_maps(model, images)
-    assert set(maps) == {"conv1_preact", "conv1_relu"}
-    assert maps["conv1_preact"].shape == (10, 6, 28, 28)
-    assert maps["conv1_relu"].shape == (10, 6, 28, 28)
-    assert (maps["conv1_relu"] >= 0).all()
-    assert np.allclose(maps["conv1_relu"], np.maximum(maps["conv1_preact"], 0))
+    tensors = collect_feature_maps(model, images, _conv1_views(model))
+    assert set(tensors) == {"feature_maps/conv1/preact", "feature_maps/conv1/relu"}
+    assert all(isinstance(tensor, torch.Tensor) for tensor in tensors.values())
+    maps = to_cpu_numpy(tensors)
+    assert maps["feature_maps/conv1/preact"].shape == (10, 6, 28, 28)
+    assert (maps["feature_maps/conv1/relu"] >= 0).all()
+    assert np.allclose(maps["feature_maps/conv1/relu"], np.maximum(maps["feature_maps/conv1/preact"], 0))
     # And it is really conv1's output for these images
     with torch.no_grad():
         expected = model.conv1(images).numpy()
-    assert np.allclose(maps["conv1_preact"], expected)
+    assert np.allclose(maps["feature_maps/conv1/preact"], expected)
 
 
-def test_capture_restores_the_training_mode_and_removes_its_hooks():
+def test_collect_restores_the_training_mode_and_removes_its_hooks():
     model = LeNet5()
+    views = _conv1_views(model)
     hooks_before = (len(model.conv1._forward_hooks), len(model.relu1._forward_hooks))
     image = torch.randn(1, 1, 28, 28)
 
     model.train()
-    capture_conv1_maps(model, image)
+    collect_feature_maps(model, image, views)
     assert model.training
     model.eval()
-    capture_conv1_maps(model, image)
+    collect_feature_maps(model, image, views)
     assert not model.training
     assert (len(model.conv1._forward_hooks), len(model.relu1._forward_hooks)) == hooks_before
 
 
-def test_capture_cleans_up_when_the_forward_pass_fails():
+def test_collect_cleans_up_when_the_forward_pass_fails():
     model = LeNet5()
     model.train()
     hooks_before = len(model.conv1._forward_hooks)
     bad_image = torch.randn(1, 3, 28, 28)  # wrong channel count
     try:
-        capture_conv1_maps(model, bad_image)
+        collect_feature_maps(model, bad_image, _conv1_views(model))
     except RuntimeError:
         pass
     else:
@@ -57,7 +74,7 @@ def test_capture_does_not_disturb_other_training_hooks():
     seen: list[int] = []
     # A hook like the ones in train.py: only records in train mode
     model.conv1.register_forward_hook(lambda module, inputs, output: seen.append(1) if module.training else None)
-    capture_conv1_maps(model, torch.randn(1, 1, 28, 28))
+    collect_feature_maps(model, torch.randn(1, 1, 28, 28), _conv1_views(model))
     assert seen == []
 
 
@@ -157,3 +174,14 @@ def test_first_example_per_class_raises_when_a_class_is_missing():
         assert "[2]" in str(error)
     else:
         raise AssertionError("expected a ValueError")
+
+
+def test_log_returns_one_image_per_view_named_by_layer_and_view():
+    torch.manual_seed(0)
+    model = LeNet5()
+    views = _conv1_views(model)
+    images = torch.randn(3, 1, 28, 28)
+    host = to_cpu_numpy(collect_feature_maps(model, images, views))
+    logged = log_feature_maps(host, views, images[:, 0].numpy(), digits="0 1 2", step_number=20)
+    assert set(logged) == {"maps_conv1/preact", "maps_conv1/relu"}
+    assert logged["maps_conv1/preact"]._caption == "step 20; digits 0 1 2"

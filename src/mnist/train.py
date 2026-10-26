@@ -7,8 +7,27 @@ import wandb
 from mnist.config import Config, load_default_config
 from mnist.data import get_dataloaders
 from mnist.evaluate import evaluate
-from mnist.feature_maps import capture_conv1_maps, feature_maps_grid, first_example_per_class
-from mnist.filter_image import FILTER_VMAX, filters_to_image
+from mnist.monitoring.activation_histogram import (
+    collect_activation_histograms,
+    define_activation_histogram_metrics,
+    log_activation_histograms,
+    register_activation_histograms,
+)
+from mnist.monitoring.activation_summary_stats import (
+    collect_activation_summary_stats,
+    define_activation_summary_stats_metrics,
+    log_activation_summary_stats,
+    register_activation_summary_stats,
+)
+from mnist.monitoring.feature_map import (
+    FeatureMapView,
+    collect_feature_maps,
+    define_feature_map_metrics,
+    first_example_per_class,
+    log_feature_maps,
+)
+from mnist.monitoring.filter_image import collect_filter_weights, define_filter_image_metrics, log_filter_images
+from mnist.monitoring.transfer import to_cpu_numpy
 from mnist.type_aliases import CrossEntropyLossFunction
 from mnist.utils import set_seed, get_device, timestamp
 from mnist.model import LeNet5
@@ -18,61 +37,6 @@ from torch.nn import Module
 # Steps between training snapshots. Snapshot row i is training step (i + 1) * SNAPSHOT_SPACING,
 # which is how loss_landscape/plot/grid_sweep turns a step number into a row count.
 SNAPSHOT_SPACING = 10
-
-# Bins per W&B histogram (default 64, max 512). Fine bins help resolve the thin background spike in conv1.
-HISTOGRAM_BINS = 256
-
-def channel_histograms(layer_name: str, output: np.ndarray) -> dict[str, wandb.Histogram]:
-    """
-    One W&B histogram per channel of a [N, C, H, W] array, over every image and position.
-    The bin range is each channel's own min/max at that step, so bin edges differ between steps.
-    """
-    return {
-        f"activations_{layer_name}_preact_hist/ch{channel}": wandb.Histogram(
-            np_histogram=np.histogram(output[:, channel], bins=HISTOGRAM_BINS)
-        )
-        for channel in range(output.shape[1])
-    }
-
-def make_stats_hook(name: str, stats: dict[str, torch.Tensor]):
-    """
-    Returns a forward hook that records status into `stats` as a dict of key -> 0D tensor.
-    - Overwrites on every step.
-    - Does not move any values across devices.
-    - Only records in train mode.
-    """
-    @torch.no_grad()
-    def hook(module: Module, inputs: tuple[torch.Tensor, ...], output: torch.Tensor) -> None:
-        if not module.training:
-            return
-        stats[f"activations_{name}/mean"] = output.mean()
-        stats[f"activations_{name}/std"] = output.std()
-        if isinstance(module, torch.nn.ReLU):
-            stats[f"activations_{name}/frac_zero_mean"] = (output == 0).float().mean()
-            # Only look at relus downstream of the convolutions: N, C, H, W.
-            if output.dim() == 4:
-                zeros = (output == 0).float()
-                mean_by_channel = zeros.mean(dim=[0, 2, 3]) # [C]
-                for channel in range(mean_by_channel.numel()):
-                    stats[f"activations_{name}/frac_zero_ch{channel}"] = mean_by_channel[channel]
-        if isinstance(module, torch.nn.Tanh):
-            stats[f"activations_{name}/frac_saturated"] = (output.abs() > 0.95).float().mean()
-            stats[f"activations_{name}/tanh_grad_mean"] = (1 - output**2).float().mean()
-    return hook
-
-def make_stash_hook(name: str, stash: dict[str, torch.Tensor]):
-    """
-    Returns a forward hook that stashes the module's entire raw output in `tensors[name]`.
-    - Overwrites on every step.
-    - Used to build histograms at logging time. Stores a reference only: no copy, no device transfer.
-    - Only records in train mode.
-    """
-    def hook(module: Module, inputs: tuple[torch.Tensor, ...], output: torch.Tensor) -> None:
-        if not module.training:
-            return
-        # Detach from the autograd graph when adding to the stash.
-        stash[name] = output.detach()
-    return hook
 
 def train(
     config: Config,
@@ -97,28 +61,35 @@ def train(
     device = get_device()
     print(f"MOVING MODEL TO DEVICE: {device}")
     model = LeNet5().to(device)
-    # conv1's weights at init, to log how far training has moved each filter. Copied so later updates don't change it.
-    conv1_initial_weights = model.conv1.weight.detach().cpu().numpy().copy()
     parameter_count = sum(p.numel() for p in model.parameters())
     print(f"PARAMETER COUNT CHECK: {parameter_count}")
 
-    # Activation monitoring: each hook overwrites its entries every forward pass.
-    activation_stats: dict[str, torch.Tensor] = {}
-    # Raw layer outputs kept around for per-channel histograms, [N, C, H, W].
-    stashed_outputs: dict[str, torch.Tensor] = {}
-    hook_handles = [
-        model.conv1.register_forward_hook(make_stash_hook("conv1", stashed_outputs)),
-        model.conv1.register_forward_hook(make_stats_hook("conv1", activation_stats)),
-        model.relu1.register_forward_hook(make_stats_hook("relu1", activation_stats)),
-        model.conv2.register_forward_hook(make_stash_hook("conv2", stashed_outputs)),
-        model.conv2.register_forward_hook(make_stats_hook("conv2", activation_stats)),
-        model.relu2.register_forward_hook(make_stats_hook("relu2", activation_stats)),
-        model.fc1.register_forward_hook(make_stats_hook("fc1", activation_stats)),
-        model.relu3.register_forward_hook(make_stats_hook("relu3", activation_stats)),
-        model.fc2.register_forward_hook(make_stats_hook("fc2", activation_stats)),
-        model.relu4.register_forward_hook(make_stats_hook("relu4", activation_stats)),
-        model.fc3.register_forward_hook(make_stats_hook("fc3", activation_stats)),
+    # *_layers dicts describe what we are registering for each monitor type
+    stats_layers: dict[str, Module] = {
+        "conv1": model.conv1,
+        "relu1": model.relu1,
+        "conv2": model.conv2,
+        "relu2": model.relu2,
+        "fc1": model.fc1,
+        "relu3": model.relu3,
+        "fc2": model.fc2,
+        "relu4": model.relu4,
+        "fc3": model.fc3,
+    }
+    histogram_layers: dict[str, Module] = {"conv1": model.conv1, "conv2": model.conv2}
+    filter_layers = {"conv1": model.conv1}
+    feature_map_views = [
+        FeatureMapView("conv1", "preact", model.conv1, diverging=True),
+        FeatureMapView("conv1", "relu", model.relu1, diverging=False),
     ]
+
+    # Activation monitoring: each monitor's hooks overwrite their entries every forward pass.
+    activation_stats, stats_handles = register_activation_summary_stats(stats_layers)
+    stashed_outputs, histogram_handles = register_activation_histograms(histogram_layers)
+    hook_handles = stats_handles + histogram_handles
+
+    # The filters at init, to log how far training has moved each one. A one-time copy to the host.
+    initial_filter_weights = to_cpu_numpy(collect_filter_weights(filter_layers))
 
     optimizer = torch.optim.SGD(model.parameters(), lr=config.train.learning_rate, momentum=config.train.momentum)
     loss_fn = cast(CrossEntropyLossFunction, torch.nn.CrossEntropyLoss())
@@ -127,15 +98,18 @@ def train(
     name = timestamp()
     if existing_run is None:
         run = wandb.init(project="mnist", name=tag or name, group=group, config=config.model_dump())
+    else:
+        run = existing_run
     # A unique and sortable run ID to identify this run.
     run_id = f"{name}_{run.id}"
     wandb.define_metric("step_number", hidden=True)
     wandb.define_metric("train/loss", step_metric="step_number")
     wandb.define_metric("validation/loss", step_metric="step_number")
     wandb.define_metric("validation/accuracy", step_metric="step_number")
-    wandb.define_metric("activations_*", step_metric="step_number")
-    wandb.define_metric("weights_*", step_metric="step_number")
-    wandb.define_metric("maps_*", step_metric="step_number")
+    define_activation_summary_stats_metrics()
+    define_activation_histogram_metrics()
+    define_filter_image_metrics()
+    define_feature_map_metrics()
 
     data = get_dataloaders(config.data)
 
@@ -188,55 +162,23 @@ def train(
                 train_loss_value = train_loss.item()
                 print(f"step {step_number:03d}: train loss {train_loss_value:.3f}")
 
-                # Activation stats per layer
-                # Each is a 0D tensor; structure as one tensor, transfer it from CPU -> CPU once, then destructure it again
-                stat_names = list(activation_stats)
-                stat_values_tensor = torch.stack(list(activation_stats.values()))
-                # One GPU->CPU sync for all the activation stats together
-                stat_cpu = stat_values_tensor.cpu()
-                stat_values: list[torch.Tensor] = stat_cpu.tolist()
-
-                # Per-channel histograms of the convs' preactivations
-                # Move each whole [N, C, H, W] tensor to the CPU once, then slice channels in NumPy.
-                conv1_histograms = channel_histograms("conv1", stashed_outputs["conv1"].cpu().numpy())
-                conv2_histograms = channel_histograms("conv2", stashed_outputs["conv2"].cpu().numpy())
-
-                # conv1's six 5x5 filters as images:
-                # - fixed scale: magnitudes comparable across steps
-                # - normalized: each filter's pattern visible from the start
-                # - change from init (normalized): only what training has added, without the random starting pattern
-                # Read after optimizer.step(), so these are one update newer than the forward pass the activation stats came from.
-                conv1_weights = model.conv1.weight.detach().cpu().numpy()
-                filter_caption = f"step {step_number}"
-                conv1_filter_images = {
-                    "weights_conv1/filters_fixed_scale": wandb.Image(filters_to_image(conv1_weights, FILTER_VMAX), caption=filter_caption),
-                    "weights_conv1/filters_normalized": wandb.Image(filters_to_image(conv1_weights, None), caption=filter_caption),
-                    "weights_conv1/filters_change_from_init": wandb.Image(
-                        filters_to_image(conv1_weights - conv1_initial_weights, None), caption=filter_caption
-                    ),
+                # Gather everything that lives on the device, copy it to the host in one place, then log from NumPy.
+                # The weights are read after optimizer.step(), so they are one update newer than the activations.
+                stat_names, stats_device = collect_activation_summary_stats(activation_stats)
+                device_tensors = {
+                    **stats_device,
+                    **collect_activation_histograms(stashed_outputs),
+                    **collect_filter_weights(filter_layers),
+                    **collect_feature_maps(model, probe_images, feature_map_views),
                 }
-
-                # conv1's feature maps for the probe images, with the current weights: pre-ReLU (signed) and post-ReLU.
-                # One row per image, top to bottom in validation order.
-                # capture_conv1_maps runs in eval mode with temporary hooks, so it doesn't touch the stats or stashed outputs.
-                probe_maps = capture_conv1_maps(model, probe_images)
-                map_caption = f"{filter_caption}; digits {probe_digits}"
-                conv1_map_images = {
-                    "maps_conv1/preact": wandb.Image(
-                        feature_maps_grid(probe_originals, probe_maps["conv1_preact"], diverging=True), caption=map_caption
-                    ),
-                    "maps_conv1/relu": wandb.Image(
-                        feature_maps_grid(probe_originals, probe_maps["conv1_relu"], diverging=False), caption=map_caption
-                    ),
-                }
+                host = to_cpu_numpy(device_tensors)
 
                 wandb.log({
                     "train/loss": train_loss_value,
-                    **dict(zip(stat_names, stat_values)),
-                    **conv1_histograms,
-                    **conv2_histograms,
-                    **conv1_filter_images,
-                    **conv1_map_images,
+                    **log_activation_summary_stats(stat_names, host),
+                    **log_activation_histograms(host),
+                    **log_filter_images(host, initial_filter_weights, step_number),
+                    **log_feature_maps(host, feature_map_views, probe_originals, probe_digits, step_number),
                     "step_number": step_number,
                 })
 

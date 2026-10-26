@@ -1,25 +1,50 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from typing import NamedTuple
 
 import numpy as np
 import torch
+import wandb
 from matplotlib import colormaps
 from torch.nn import Module
 
-from mnist.filter_image import to_uint8_rgb, tile_row
-from mnist.model import LeNet5
+from mnist.monitoring.image_utils import tile_row, to_uint8_rgb
+
+# Keys are f"{NAMESPACE}_{layer}/{view name}", so each layer gets its own W&B section.
+NAMESPACE = "maps"
+METRIC_GLOB = f"{NAMESPACE}_*"
+# The prefix of this monitor's tensors in the dict that goes through to_cpu_numpy.
+# After it come the layer and the view name, each after a slash.
+DEVICE_KEY = "feature_maps"
+
+class FeatureMapView(NamedTuple):
+    """
+    Description of a module to output as a feature map.
+    
+    - layer: the section name in W&B, e.g. "conv1".
+    - name: the image name inside the section, e.g. "preact".
+    - module: the module whose output is read. Its output must be [N, C, H, W].
+    - diverging: True for signed values such as pre-ReLU outputs, False for non-negative ones such as post-ReLU outputs.
+    """
+    layer: str
+    name: str
+    module: Module
+    diverging: bool
 
 def first_example_per_class(batches: Iterable[tuple[torch.Tensor, torch.Tensor]], class_count: int = 10) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Scans (images, labels) batches in order and keeps the first image seen for each class, stopping as soon as every
-    class has one. Returns (images [class_count, ...], labels [class_count]) ordered by class, 0 to class_count - 1.
-    Pass an unshuffled loader so the same exemplars are picked every time.
-    Raises ValueError if some class never appears.
+    class has one.
+    
+    Returns (images [class_count, ...], labels [class_count]) ordered by class, 0 to class_count - 1.
+
+    - Pass an unshuffled loader so the same exemplars are picked every time.
+    - Raises ValueError if some class never appears.
     """
     found: dict[int, torch.Tensor] = {}
     for images, labels in batches:
-        for image, label in zip(images, labels.tolist()):
-            if label not in found:
-                found[label] = image
+        for image, label in zip(images, labels):
+            if int(label) not in found:
+                found[int(label)] = image
         if len(found) == class_count:
             break
     missing = [label for label in range(class_count) if label not in found]
@@ -30,26 +55,25 @@ def first_example_per_class(batches: Iterable[tuple[torch.Tensor, torch.Tensor]]
 def make_capture_hook(name: str, captured: dict[str, torch.Tensor]):
     """
     Returns a forward hook that stores the module's output in `captured[name]`.
-    Unlike make_stats_hook / make_stash_hook in train.py, this records in eval mode too, since it is
+    Unlike the stats and histogram hooks, this records in eval mode too, since it is
     only registered for the duration of a probe pass.
     """
     def hook(module: Module, inputs: tuple[torch.Tensor, ...], output: torch.Tensor) -> None:
         captured[name] = output.detach()
     return hook
 
-def capture_conv1_maps(model: LeNet5, probe_images: torch.Tensor) -> dict[str, np.ndarray]:
+def collect_feature_maps(model: Module, probe_images: torch.Tensor, views: Sequence[FeatureMapView]) -> dict[str, torch.Tensor]:
     """
-    Runs images [N, 1, 28, 28] through the model in eval mode and returns conv1's output for them, as NumPy:
-    - "conv1_preact": conv1's output, the input to relu1
-    - "conv1_relu": relu1's output
-    Each is [N, C, H, W]. The model's train/eval mode is restored, and the temporary hooks are removed, even on error.
+    Runs `probe_images` [N, 1, 28, 28] through the model in eval mode and returns each view's output, [N, C, H, W],
+    as detached device tensors keyed for to_cpu_numpy. The model's train/eval mode is restored, and the temporary hooks
+    are removed, even on error.
 
-    The permanent training hooks (stats, stash) skip eval mode, so this does not disturb them.
+    The permanent training hooks skip eval mode, so this does not disturb them.
     """
     captured: dict[str, torch.Tensor] = {}
     handles = [
-        model.conv1.register_forward_hook(make_capture_hook("conv1_preact", captured)),
-        model.relu1.register_forward_hook(make_capture_hook("conv1_relu", captured)),
+        view.module.register_forward_hook(make_capture_hook(f"{DEVICE_KEY}/{view.layer}/{view.name}", captured))
+        for view in views
     ]
     was_training = model.training
     model.eval()
@@ -60,8 +84,7 @@ def capture_conv1_maps(model: LeNet5, probe_images: torch.Tensor) -> dict[str, n
         for handle in handles:
             handle.remove()
         model.train(was_training)
-    # One transfer per tensor
-    return {name: tensor.cpu().numpy() for name, tensor in captured.items()}
+    return captured
 
 def feature_maps_to_image(original: np.ndarray, maps: np.ndarray, diverging: bool, scale: int = 4, gap: int = 2) -> np.ndarray:
     """
@@ -99,3 +122,26 @@ def feature_maps_grid(originals: np.ndarray, maps: np.ndarray, diverging: bool, 
             stacked.append(spacer)
         stacked.append(row)
     return np.concatenate(stacked, axis=0)
+
+def log_feature_maps(
+    host: dict[str, np.ndarray],
+    views: Sequence[FeatureMapView],
+    originals: np.ndarray,
+    digits: str,
+    step_number: int,
+) -> dict[str, wandb.Image]:
+    """
+    One image per view: a row per probe image, top to bottom, in the order of `originals`.
+    host: the result of to_cpu_numpy, entries of other monitors are ignored.
+    originals: [N, H, W] probe images for the left column. digits: their labels, for the caption.
+    """
+    caption = f"step {step_number}; digits {digits}"
+    return {
+        f"{NAMESPACE}_{view.layer}/{view.name}": wandb.Image(
+            feature_maps_grid(originals, host[f"{DEVICE_KEY}/{view.layer}/{view.name}"], view.diverging), caption=caption
+        )
+        for view in views
+    }
+
+def define_feature_map_metrics() -> None:
+    wandb.define_metric(METRIC_GLOB, step_metric="step_number")
