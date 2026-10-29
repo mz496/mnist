@@ -1,5 +1,11 @@
 # MNIST handwritten digit identification
 
+> [!IMPORTANT]
+> Part of a series on learning about language models and beyond in order to contribute to AI safety generally
+> 1. [here] Preliminaries (LeNet; neural nets; workflow)
+> 2. [[repo]](https://github.com/mz496/gpt) Transformers (attention; tokenization; finetuning)
+> 3. [[repo]](https://github.com/mz496/rl) Reinforcement learning (classical; RLHF; RLVR)
+
 ![](img/2026-10-26-layer-view-screenshot.png)
 
 What I did:
